@@ -28,6 +28,7 @@ pix = np.stack([xs.ravel(), ys.ravel(), np.ones(W * H)])
 rng = np.random.default_rng(1)
 table = (150 + 18 * np.sin(xs / 37.0) * np.cos(ys / 53.0) + rng.normal(0, 4, (H, W))).clip(0, 255)
 
+os.makedirs(os.path.join(root, 'fixtures'), exist_ok=True)
 out = open(os.path.join(root, 'fixtures', 'marker.y4m'), 'wb')
 out.write(f'YUV4MPEG2 W{W} H{H} F{FPS}:1 Ip A1:1 C420jpeg\n'.encode())
 for f in range(FRAMES):
