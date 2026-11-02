@@ -333,6 +333,46 @@ console.log(`\nPORTAL e2e — serving dist at ${ORIGIN}${BASE}\n`);
   await browser.close();
 }
 
+// ================================================================ suite D: WebXR path asks for the camera *before* the AR session
+{
+  const browser = await chromium.launch({ args: [...GL_ARGS, ...CAM_ARGS] });
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, permissions: ['camera'] });
+  await ctx.addInitScript(() => {
+    window.__calls = [];
+    const gum = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    navigator.mediaDevices.getUserMedia = (c) => (window.__calls.push('getUserMedia'), gum(c));
+    Object.defineProperty(navigator, 'xr', {
+      value: {
+        isSessionSupported: async (m) => m === 'immersive-ar',
+        requestSession: async () => {
+          window.__calls.push('requestSession');
+          throw new DOMException('no ARCore here', 'NotSupportedError');
+        },
+      },
+    });
+  });
+  const page = await ctx.newPage();
+  const errors = [];
+  watchErrors(page, errors);
+  await test('2c. WebXR: câmera pedida na página antes da sessão AR (evita bloqueio do Android)', async () => {
+    await page.goto(URL_);
+    await page.waitForFunction(() => document.querySelector('.cap-text').textContent.includes('superfícies'));
+    await page.click('#open-portal');
+    await page.waitForSelector('.instruction.on .pill.primary', { timeout: 60000 });
+    assert((await page.textContent('.ins-title')).includes('Câmera liberada'), 'camera-ready step');
+    let calls = await page.evaluate(() => window.__calls);
+    assert(calls.join() === 'getUserMedia', 'camera must be requested before any AR session: ' + calls);
+    await page.click('.instruction .pill.primary');
+    await page.waitForFunction(() => window.__portal.currentMode === 'marker', null, { timeout: 60000 });
+    calls = await page.evaluate(() => window.__calls);
+    assert(calls[0] === 'getUserMedia' && calls.includes('requestSession'), 'order ' + calls);
+  });
+  await test('sem erros de JavaScript (suite WebXR)', async () => {
+    assert(errors.length === 0, errors.join(' | '));
+  });
+  await browser.close();
+}
+
 // ================================================================ 12. GitHub Pages sub-directory
 await test('12. publicação em subdiretório (/portal-ar/): nenhum 404, marcador acessível', async () => {
   const res = await fetch(`${ORIGIN}${BASE}marcador.html`);
