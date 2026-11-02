@@ -84,6 +84,13 @@ const assert = (c, msg) => {
 const GL_ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required'];
 const CAM_ARGS = ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream', `--use-file-for-fake-video-capture=${video}`];
 
+const THROTTLE = Number(process.env.E2E_CPU_THROTTLE || 0);
+async function maybeThrottle(page) {
+  if (!THROTTLE) return;
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Emulation.setCPUThrottlingRate', { rate: THROTTLE });
+}
+
 function watchErrors(page, bag) {
   page.on('pageerror', (e) => bag.push(e.message));
   page.on('console', (m) => m.type() === 'error' && bag.push(m.text()));
@@ -236,6 +243,7 @@ console.log(`\nPORTAL e2e — serving dist at ${ORIGIN}${BASE}\n`);
     await page.evaluate(() => {
       const p = window.__portal;
       p.explore.controls.autoRotate = false;
+      p.explore.controls.enableDamping = false; // no leftover camera momentum between projection and click
       p.engine.camera.position.set(1.5, 1.6, 3.4);
       p.explore.controls.target.set(0.4, 0.7, 0.4);
       p.explore.controls.update();
@@ -391,6 +399,7 @@ console.log(`\nPORTAL e2e — serving dist at ${ORIGIN}${BASE}\n`);
   const errors = [];
   watchErrors(page, errors);
   const W = 'p.stage.world';
+  await maybeThrottle(page);
   await test('vale: seletor de mundo e abertura do portal', async () => {
     await page.goto(URL_);
     await page.click('.world-opt[data-world="vila"]');
@@ -401,6 +410,7 @@ console.log(`\nPORTAL e2e — serving dist at ${ORIGIN}${BASE}\n`);
     await page.evaluate(() => {
       const p = window.__portal;
       p.explore.controls.autoRotate = false;
+      p.explore.controls.enableDamping = false; // no leftover camera momentum between projection and click
       p.engine.camera.position.set(0.1, 2.5, 2.2);
       p.explore.controls.target.set(0, 1.0, 0);
       p.explore.controls.update();
