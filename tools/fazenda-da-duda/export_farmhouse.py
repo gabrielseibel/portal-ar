@@ -30,6 +30,25 @@ bpy.ops.object.join()
 ob = bpy.context.view_layer.objects.active
 ob.name = 'Farmhouse'
 
+# the FBX carries an odd yaw: square the walls up with the axes (area-weighted
+# histogram of the vertical faces' directions, folded to 90 degrees)
+import math
+hist = [0.0] * 90
+for poly in ob.data.polygons:
+    n = poly.normal
+    if abs(n.z) > 0.2:
+        continue
+    a = math.degrees(math.atan2(n.y, n.x)) % 90
+    hist[int(a) % 90] += poly.area
+best = max(range(90), key=lambda i: sum(hist[(i + k) % 90] for k in (-1, 0, 1)))
+yaw = math.radians(best + 0.5)
+if yaw > math.radians(45):
+    yaw -= math.radians(90)
+rot = mathutils.Matrix.Rotation(-yaw, 4, 'Z')
+for v in ob.data.vertices:
+    v.co = rot @ v.co
+print('yaw correction (deg)', round(math.degrees(-yaw), 2))
+
 co = [v.co for v in ob.data.vertices]
 mn = mathutils.Vector([min(c[i] for c in co) for i in range(3)])
 mx = mathutils.Vector([max(c[i] for c in co) for i in range(3)])

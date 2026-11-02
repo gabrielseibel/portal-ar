@@ -35,8 +35,8 @@ export const FIELD_NAMES: Record<FieldKind, [string, string]> = {
 };
 
 export const HOUSE_LOT: Rect = [18, 43, 47, 68];
-/** Farmhouse model placement (centre of its footprint, width in voxels). */
-export const HOUSE = { x: 31, y: 57.5, width: 22 };
+/** Farmhouse model placement: centre of its footprint and depth in voxels (the model is 0.82 wide × 1 deep). */
+export const HOUSE = { x: 31, y: 57.5, depth: 20, width: 16.4 };
 export const GREENHOUSE: Rect = [28, 44, 79, 94];
 export const SHED: Rect = [39, 48, 38, 45];
 export const BARN: Rect = [92, 111, 82, 96];
@@ -52,8 +52,8 @@ export const DOG_BED = { x: 47, y: 79 };
 /** Duda's daily walk along the farm paths: [x, y, pause seconds, activity]. */
 export type Stop = readonly [x: number, y: number, pause: number, act?: 'water' | 'look' | 'house' | 'wave'];
 export const ROUTE: readonly Stop[] = [
-  [21.5, 46, 3, 'house'],
-  [21.5, 38.5, 0],
+  [32, 46, 3, 'house'],
+  [32, 38.5, 0],
   [40, 37.5, 0],
   [56, 37.5, 2.5, 'look'],
   [63, 37.5, 0],
@@ -69,5 +69,5 @@ export const ROUTE: readonly Stop[] = [
   [65, 60, 0],
   [65, 38, 0],
   [40, 37.5, 0],
-  [21.5, 38.5, 0],
+  [32, 38.5, 0],
 ];

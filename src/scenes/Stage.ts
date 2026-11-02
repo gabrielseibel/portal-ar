@@ -61,6 +61,8 @@ export class Stage {
   private seqRunning = false;
 
   baseScale = 1;
+  /** Extra height of the island above its normal place (stage units, user adjustable). */
+  islandLift = 0;
   userScale = 1;
   userYaw = 0;
   readonly userOffset = new THREE.Vector3();
@@ -249,6 +251,19 @@ export class Stage {
     }
   }
 
+  get islandY() {
+    return ISLAND_Y + this.islandLift;
+  }
+
+  /** Raises/lowers the island (and its sky) without restarting the opening. */
+  setIslandLift(v: number) {
+    this.islandLift = v;
+    this.islandCenter.y = this.islandY + 0.25;
+    this.sky.group.position.y = v;
+    this.birds.group.position.y = v;
+    if (!this.seqRunning || this.seqT >= RISE_START + RISE_DUR) this.world.group.position.y = this.islandY;
+  }
+
   get worldScale() {
     return this.root.getWorldScale(this.tmp).x;
   }
@@ -287,7 +302,7 @@ export class Stage {
     this.portal.progress = 1;
     this.portal.markOpen();
     this.world.group.visible = true;
-    this.world.group.position.y = ISLAND_Y;
+    this.world.group.position.y = this.islandY;
     this.world.group.scale.setScalar(1);
     this.world.group.rotation.y = 0;
     this.sky.group.visible = this.birds.group.visible = true;
@@ -363,7 +378,7 @@ export class Stage {
       }
       const k = clamp((T - RISE_START) / RISE_DUR);
       const e = easeOutCubic(k);
-      this.world.group.position.y = lerp(-1.75, ISLAND_Y, e);
+      this.world.group.position.y = lerp(-1.75, this.islandY, e);
       this.world.group.rotation.y = lerp(-0.9, 0, easeInOutCubic(k));
       this.world.group.scale.setScalar(lerp(0.72, 1, e));
       if (k > 0.75) {

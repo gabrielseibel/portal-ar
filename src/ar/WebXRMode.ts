@@ -13,7 +13,7 @@ import { shared } from '../systems/SharedUniforms';
 export class WebXRMode implements ARMode {
   readonly kind = 'webxr' as const;
   readonly label = 'Realidade aumentada · superfícies detectadas';
-  readonly baseScale = 0.16;
+  readonly baseScale = 0.3;
   placing = true;
   onStatus: (s: PlacementStatus) => void = () => {};
   onPlaced: () => void = () => {};

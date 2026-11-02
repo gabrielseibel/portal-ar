@@ -30,7 +30,12 @@ import { loadOptionalModels } from '../systems/AssetLoader';
 type ExpState = 'idle' | 'placing' | 'opening' | 'world';
 
 const SCALE_MIN = 0.4;
-const SCALE_MAX = 3;
+const SCALE_MAX = 6;
+/** Island height range (stage units) for the "Altura da ilha" slider; 0.45 is the default place. */
+const LIFT_MIN = -0.9;
+const LIFT_MAX = 1.1;
+const liftFromSlider = (v: number) => LIFT_MIN + (LIFT_MAX - LIFT_MIN) * v;
+const sliderFromLift = (l: number) => (l - LIFT_MIN) / (LIFT_MAX - LIFT_MIN);
 const scaleFromSlider = (v: number) => SCALE_MIN * Math.pow(SCALE_MAX / SCALE_MIN, v);
 const sliderFromScale = (s: number) => Math.log(s / SCALE_MIN) / Math.log(SCALE_MAX / SCALE_MIN);
 
@@ -65,7 +70,7 @@ export class Experience {
   private dragonHello = false;
   private uiRoot: HTMLElement;
   private wasPlacedOnce = false;
-  private preferredCameraMode: 'marker' | 'manual' = 'marker';
+  private preferredCameraMode: 'marker' | 'manual' = 'manual';
   /** Name of the last tapped target (diagnostics / automated tests). */
   lastTap: string | null = null;
   private lastXRError = '';
@@ -143,6 +148,17 @@ export class Experience {
       onScale: (v) => {
         this.stage.userScale = scaleFromSlider(v);
         this.stage.applyTransform();
+      },
+      onLift: (v) => {
+        const before = this.stage.islandLift;
+        this.stage.setIslandLift(liftFromSlider(v));
+        // in 3D mode the camera follows the island so it stays framed
+        if (this.mode?.kind === 'explore' && this.explore) {
+          const d = this.stage.islandLift - before;
+          this.explore.controls.target.y += d;
+          this.engine.camera.position.y += d;
+          this.explore.controls.update();
+        }
       },
       onReposition: () => this.reposition(),
       onRotate: (dir) => {
@@ -353,26 +369,7 @@ export class Experience {
       [
         { label: 'Tentar de novo', primary: true, onClick: () => (this.overlay.closeSheet(), void this.startXRFlow()) },
         { label: 'Explorar em 3D', onClick: () => (this.overlay.closeSheet(), void this.startExplore()) },
-        { label: 'Outras opções', onClick: () => (this.overlay.closeSheet(), this.chooseCameraMode(true)) },
-      ],
-    );
-  }
-
-  /**
-   * Devices without WebXR surface detection: explain the honest options.
-   * The printed marker is the only way to keep the world fixed in the room there.
-   */
-  chooseCameraMode(afterXRFailure = false) {
-    this.prepare('');
-    this.overlay.loading(false);
-    this.overlay.showChrome(false);
-    this.overlay.sheet(
-      afterXRFailure ? 'Como abrir o portal' : 'Seu navegador não detecta superfícies',
-      'Para o mundo ficar preso à mesa sem detecção de superfícies, o PORTAL precisa de uma referência: o marcador impresso (um quadrado preto e branco, como um QR code) que você coloca sobre a mesa. Sem ele, o mundo aparece sobre a câmera e acompanha apenas a rotação do celular, não os seus passos.',
-      [
-        { label: 'Usar sem marcador', primary: true, onClick: () => (this.overlay.closeSheet(), void this.startCamera('manual')) },
-        { label: 'Tenho o marcador impresso', onClick: () => (this.overlay.closeSheet(), void this.startCamera('marker')) },
-        { label: 'Explorar em 3D', onClick: () => (this.overlay.closeSheet(), void this.startExplore()) },
+        { label: 'Usar câmera com giroscópio', onClick: () => (this.overlay.closeSheet(), void this.startCamera('manual')) },
       ],
     );
   }
@@ -413,7 +410,7 @@ export class Experience {
     }
     document.body.classList.add('camera-on');
     await this.runCameraMode(preferred);
-    if (xrFailed) this.overlay.hint('Detecção de superfícies indisponível aqui — usando o modo com marcador.', 5000);
+    if (xrFailed) this.overlay.hint('Detecção de superfícies indisponível aqui: usando a câmera com o giroscópio.', 5000);
   }
 
   private async runCameraMode(kind: 'marker' | 'manual') {
@@ -427,6 +424,15 @@ export class Experience {
     this.overlay.setMode(kind === 'marker' ? 'AR · marcador' : 'AR · manual');
     this.overlay.showChrome(true);
     this.beginPlacement();
+  }
+
+  /** The camera path did not work out: release the camera and go to the 3D mode. */
+  private async leaveCameraForExplore() {
+    this.mode?.stop();
+    this.mode = null;
+    this.feed.stop();
+    document.body.classList.remove('camera-on');
+    await this.startExplore();
   }
 
   async startExplore() {
@@ -454,6 +460,8 @@ export class Experience {
     this.stage.userOffset.set(0, 0, 0);
     this.stage.applyTransform();
     this.overlay.setScaleValue(sliderFromScale(1));
+    this.stage.setIslandLift(0);
+    this.overlay.setLiftValue(sliderFromLift(0));
     this.stage.setEnvironment('ar', this.engine.scene);
     this.state = 'idle';
     this.wasPlacedOnce = false;
@@ -484,8 +492,8 @@ export class Experience {
     };
     const [title, text] = texts[kind] ?? texts.unknown;
     this.overlay.sheet(title, text, [
-      { label: 'Explorar sem câmera', onClick: () => (this.overlay.closeSheet(), void this.startExplore()) },
-      { label: 'Tentar novamente', primary: true, onClick: () => (this.overlay.closeSheet(), void this.startBest()) },
+      { label: 'Explorar em 3D', primary: true, onClick: () => (this.overlay.closeSheet(), void this.startExplore()) },
+      { label: 'Tentar novamente', onClick: () => (this.overlay.closeSheet(), void this.startBest()) },
       { label: 'Voltar', onClick: () => (this.overlay.closeSheet(), this.exit()) },
     ]);
   }
@@ -539,14 +547,14 @@ export class Experience {
             this.onPlacementStatus('surface');
           },
         });
-      actions.push({ label: 'Tenho o marcador impresso', onClick: () => void this.runCameraMode('marker') });
+      actions.push({ label: 'Explorar em 3D', onClick: () => void this.leaveCameraForExplore() });
       if (s === 'aim-down') spec = { title: main, text: 'Incline o celular em direção à mesa.', visual: 'tilt', actions };
       else if (s === 'surface' || s === 'starting')
         spec = {
           title: main,
           text: manual.gyroscopeActive
             ? 'Aponte para onde o portal deve abrir e toque. Sem detecção de superfícies: o mundo acompanha a rotação do celular, mas não os seus passos.'
-            : 'Arraste o anel até a sua mesa e toque para abrir. Sem detecção de superfícies: a superfície não é detectada automaticamente.',
+            : 'Sem detecção de superfícies e o giroscópio não respondeu: arraste o anel até onde o portal deve abrir e toque. Se preferir, explore o mundo em 3D.',
           visual: 'tap',
           actions,
         };
@@ -1282,7 +1290,7 @@ export class Experience {
   async startBest() {
     const caps = await detectCapabilities();
     if (caps.webxrAR) return this.startXRFlow();
-    if (caps.camera) this.chooseCameraMode();
+    if (caps.camera) await this.startCamera('manual');
     else this.cameraFailed(new CameraError(caps.secure ? 'notfound' : 'insecure', ''));
   }
 }

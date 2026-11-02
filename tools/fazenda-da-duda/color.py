@@ -105,26 +105,66 @@ for x in range(NX):
             continue
         for z in range(4, NZ):
             c = occ[x, y, z]
-            if c and c != 3:
+            # a solid leafy block standing on the ground is a hedge/bush, not a tree crown
+            if c and c != 3 and not (occ[x, y, 2:z + 1].all() and not (occ[x, y, 2:z] == 3).any()):
                 canopy[x, y, z] = True
-tree_id = np.zeros(occ.shape, np.int32)
-trees = []
-for s in zip(*np.nonzero(canopy)):
-    if tree_id[s]:
+# split the canopy into trees: neighbouring canopies are often fused, so each
+# canopy voxel belongs to the nearest trunk (trunk = wood column under canopy)
+trunk_col = np.zeros((NX, NY), bool)
+for x in range(NX):
+    for y in range(NY):
+        if canopy[x, y].any():
+            zc = int(np.nonzero(canopy[x, y])[0].min())
+            if zc > 2 and occ[x, y, 2] == 3 and (occ[x, y, 2:zc] == 3).all():
+                trunk_col[x, y] = True
+trunks = []
+seen2 = np.zeros((NX, NY), bool)
+for x, y in zip(*np.nonzero(trunk_col)):
+    if seen2[x, y]:
         continue
-    tid = len(trees) + 1
-    q = deque([s]); tree_id[s] = tid; pts = []
+    q = deque([(x, y)]); seen2[x, y] = True; pts = []
     while q:
-        p = q.popleft(); pts.append(p)
-        x, y, z = p
+        a, b = q.popleft(); pts.append((a, b))
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            X, Y = a + dx, b + dy
+            if 0 <= X < NX and 0 <= Y < NY and trunk_col[X, Y] and not seen2[X, Y]:
+                seen2[X, Y] = True; q.append((X, Y))
+    trunks.append((np.array(pts).mean(0), pts))
+tree_id = np.zeros(occ.shape, np.int32)
+TC = np.array([t[0] for t in trunks]) if trunks else np.zeros((0, 2))
+cv = np.argwhere(canopy)
+orphan_base = len(trunks)
+for x, y, z in cv:
+    if len(TC):
+        d = np.hypot(TC[:, 0] - x, TC[:, 1] - y)
+        i = int(np.argmin(d))
+        if d[i] <= 9:
+            tree_id[x, y, z] = i + 1
+for i, (_, pts) in enumerate(trunks):
+    for a, b in pts:
+        zc = int(np.nonzero(canopy[a, b])[0].min())
+        tree_id[a, b, 2:zc] = i + 1          # the trunk belongs to its tree too
+# canopy far from any trunk (bushes on walls etc.): flood-fill the rest
+rest = canopy & (tree_id == 0)
+nid = len(trunks)
+for s0 in zip(*np.nonzero(rest)):
+    if tree_id[s0]:
+        continue
+    nid += 1
+    q = deque([s0]); tree_id[s0] = nid
+    while q:
+        x, y, z = q.popleft()
         for dx, dy, dz in ((1,0,0),(-1,0,0),(0,1,0),(0,-1,0),(0,0,1),(0,0,-1)):
             X, Y, Z = x + dx, y + dy, z + dz
-            if 0 <= X < NX and 0 <= Y < NY and 0 <= Z < NZ and canopy[X, Y, Z] and not tree_id[X, Y, Z]:
-                tree_id[X, Y, Z] = tid; q.append((X, Y, Z))
-    P = np.array(pts)
+            if 0 <= X < NX and 0 <= Y < NY and 0 <= Z < NZ and rest[X, Y, Z] and not tree_id[X, Y, Z]:
+                tree_id[X, Y, Z] = nid; q.append((X, Y, Z))
+trees = []
+for tid in range(1, nid + 1):
+    P = np.argwhere((tree_id == tid) & canopy)
+    if not len(P):
+        trees.append({'n': 0, 'c': [0, 0, 0], 'zmin': 0, 'zmax': 0, 'cls': 1}); continue
     cls = np.bincount(occ[tuple(P.T)], minlength=5)
-    trees.append({'n': len(P), 'c': P.mean(0).tolist(), 'zmin': int(P[:, 2].min()), 'zmax': int(P[:, 2].max()),
-                  'cls': int(np.argmax(cls))})
+    trees.append({'n': len(P), 'c': P.mean(0).tolist(), 'zmin': int(P[:, 2].min()), 'zmax': int(P[:, 2].max()), 'cls': int(np.argmax(cls))})
 # tree kinds: most green, golden class -> autumn/blossom mix, a few fruit trees
 for i, t in enumerate(trees):
     r = h2(int(t['c'][0]), int(t['c'][1]), 3)
@@ -148,15 +188,12 @@ cx0, cx1, cy0, cy1 = CORRIDOR
 kill = (set(np.unique(tree_id[hx0:hx1 + 1, hy0:hy1 + 1, :]).tolist()) | set(np.unique(tree_id[cx0:cx1 + 1, cy0:cy1 + 1, :]).tolist())) - {0}
 for tid in kill:
     m = tree_id == tid
-    cols2 = m.any(2)
     occ[m] = 0; canopy[m] = False; tree_id[m] = 0
-    for x, y in zip(*np.nonzero(cols2)):
-        occ[x, y, 2:][occ[x, y, 2:] == 3] = 0
     trees[tid - 1]['n'] = 0
 for (a0, a1, b0, b1) in (BUILD['house'], CORRIDOR):
     occ[a0:a1 + 1, b0:b1 + 1, 2:] = 0
     canopy[a0:a1 + 1, b0:b1 + 1, :] = False
-PORCH_PATHS = (R(20, 23, 47, 58), R(20, 40, 47, 50))
+PORCH_PATHS = (R(30, 34, 47, 58), R(20, 40, 47, 50))
 
 def noise(x, y, s):
     # cheap value noise blobs
@@ -252,6 +289,31 @@ for x in range(NX):
 
 col[occ == 0] = 0
 part[occ == 0] = 0
+
+# --- clean-up: nothing may float ------------------------------------------------
+# 1) trunks whose canopy was removed (lot / corridor clearing)
+for x, y, z in zip(*np.nonzero(col == TRUNK)):
+    x0, x1, y0, y1 = max(0, x - 3), min(NX, x + 4), max(0, y - 3), min(NY, y + 4)
+    if not (part[x0:x1, y0:y1, z:] == 1).any():
+        col[x, y, z] = 0
+# 2) any object piece (z >= 2) that does not rest on the ground or on something that does
+solid = col > 0
+seen = np.zeros(solid.shape, bool)
+q = deque()
+for x, y in zip(*np.nonzero(solid[:, :, 2] & solid[:, :, 1])):
+    seen[x, y, 2] = True; q.append((x, y, 2))
+while q:
+    x, y, z = q.popleft()
+    for dx in (-1, 0, 1):
+        for dy in (-1, 0, 1):
+            for dz in (-1, 0, 1):
+                X, Y, Z = x + dx, y + dy, z + dz
+                if 2 <= Z < NZ and 0 <= X < NX and 0 <= Y < NY and solid[X, Y, Z] and not seen[X, Y, Z]:
+                    seen[X, Y, Z] = True; q.append((X, Y, Z))
+floating = solid.copy(); floating[:, :, :2] = False; floating &= ~seen
+print('removed floating voxels', int(floating.sum()))
+col[floating] = 0
+part[col == 0] = 0
 
 # crop plants = 2D connected clusters of crop columns
 crop_cols = np.zeros((NX, NY), bool)

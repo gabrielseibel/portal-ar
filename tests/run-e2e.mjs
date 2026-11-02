@@ -135,7 +135,7 @@ async function tapObject(page, expr) {
 
 console.log(`\nPORTAL e2e — serving dist at ${ORIGIN}${BASE}\n`);
 
-// ================================================================ suite A: camera + marker AR
+// ================================================================ suite A: camera (gyroscope first; marker only via ?mode / code)
 {
   const browser = await chromium.launch({ args: [...GL_ARGS, ...CAM_ARGS] });
   const ctx = await browser.newContext({ viewport: { width: 412, height: 860 }, permissions: ['camera'], hasTouch: false });
@@ -160,26 +160,26 @@ console.log(`\nPORTAL e2e — serving dist at ${ORIGIN}${BASE}\n`);
     const txt = await page.textContent('.cap-text');
     assert(!txt.includes('com detecção de superfícies'), 'should not claim surface detection: ' + txt);
     assert(txt.includes('Sem detecção de superfícies'), 'honest capability text: ' + txt);
-    assert(await page.isVisible('.marker-only'), 'marker link visible on devices without WebXR');
+    assert((await page.locator('.marker-only').count()) === 0, 'no printed-marker link: the camera opens straight away');
   });
 
-  await test('2+4. sem WebXR: opções explicadas → marcador → câmera ativa', async () => {
+  await test('2+4. sem WebXR: direto para a câmera com giroscópio (sem marcador) → câmera ativa', async () => {
     await page.click('#open-portal');
-    await page.waitForSelector('.sheet-wrap.on', { timeout: 60000 });
-    assert((await page.textContent('.sheet-title')).includes('não detecta superfícies'), 'choice sheet');
-    await page.click('.sheet .pill:has-text("Tenho o marcador impresso")');
-    await page.waitForFunction(() => window.__portal?.currentMode === 'marker', null, { timeout: 60000 });
+    await page.waitForFunction(() => window.__portal?.currentMode === 'manual', null, { timeout: 60000 });
+    assert(!(await page.isVisible('.sheet-wrap.on')), 'no choice sheet before the camera');
+    const ins = await page.textContent('.instruction');
+    assert(ins.includes('Explorar em 3D'), '3D offered as the alternative: ' + ins);
     const live = await page.evaluate(() => {
       const v = document.querySelector('video.camera-feed');
       return { w: v.videoWidth, playing: !v.paused, tracks: v.srcObject?.getVideoTracks().length };
     });
     assert(live.w > 0 && live.tracks === 1, 'camera stream not live ' + JSON.stringify(live));
-    // the fake camera shows the marker right away, so placement may already be underway
     const title = await page.textContent('.ins-title');
-    assert(/Procure uma superfície plana para abrir seu portal\.|Marcador encontrado/.test(title), 'placement instruction: ' + title);
+    assert(/Procure uma superfície plana para abrir seu portal\./.test(title), 'placement instruction: ' + title);
   });
 
-  await test('5. posicionamento: marcador impresso detectado e pose estimada', async () => {
+  await test('5. modo marcador (opcional): marcador impresso detectado e pose estimada', async () => {
+    await page.evaluate(() => window.__portal.runCameraMode('marker'));
     await page.waitForFunction(() => window.__portal.phase !== 'hidden', null, { timeout: 60000 });
     const a = await page.evaluate(() => window.__portal.stage.anchor.position.toArray());
     assert(a[2] < -0.5, 'anchor should be in front of camera: ' + a);
@@ -226,8 +226,7 @@ console.log(`\nPORTAL e2e — serving dist at ${ORIGIN}${BASE}\n`);
 
   await test('5b. modo manual: tocar posiciona o portal na superfície assumida', async () => {
     await page.click('.dock-btn[aria-label="Reposicionar"]');
-    // the fake feed always shows the marker (it is re-found instantly), so switch modes programmatically —
-    // the same call the "Sem marcador" button makes
+    // the fake feed always shows the marker (it is re-found instantly), so switch modes programmatically
     await page.evaluate(() => window.__portal.runCameraMode('manual'));
     await page.waitForFunction(() => window.__portal.currentMode === 'manual', null, { timeout: 30000 });
     await page.waitForTimeout(400);
@@ -360,7 +359,7 @@ console.log(`\nPORTAL e2e — serving dist at ${ORIGIN}${BASE}\n`);
     await page.waitForSelector('.sheet-wrap.on', { timeout: 60000 });
     assert((await page.textContent('.sheet-title')).includes('câmera'), 'denied sheet title');
     await page.screenshot({ path: path.join(out, 'e2e-02-denied.png') });
-    await page.click('.sheet .pill:has-text("Explorar sem câmera")');
+    await page.click('.sheet .pill:has-text("Explorar em 3D")');
     await page.waitForFunction(() => window.__portal.currentMode === 'explore', null, { timeout: 60000 });
   });
   await test('sem erros de JavaScript (suite permissões)', async () => {

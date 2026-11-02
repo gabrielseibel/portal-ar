@@ -22,6 +22,8 @@ export interface OverlayHandlers {
   onExit: () => void;
   onSound: () => void;
   onScale: (v: number) => void;
+  /** Island height, 0 (lowest) … 1 (highest). */
+  onLift: (v: number) => void;
   onReposition: () => void;
   onRotate: (dir: number) => void;
   onZoom: (dir: number) => void;
@@ -56,6 +58,7 @@ export class Overlay {
   private scalePop: HTMLElement;
   private explorePop: HTMLElement;
   private scaleInput: HTMLInputElement;
+  private liftInput: HTMLInputElement;
   private autoBtn: HTMLButtonElement;
   private statusEl: HTMLElement;
   private timers = new Map<string, number>();
@@ -93,7 +96,20 @@ export class Overlay {
     const plus = btn('zoomIn', 'Aumentar', 'mini-btn');
     minus.addEventListener('click', () => this.nudgeScale(-0.1));
     plus.addEventListener('click', () => this.nudgeScale(0.1));
-    this.scalePop = h('div', { class: 'popover pop-scale', role: 'dialog', 'aria-label': 'Escala' }, h('p', { class: 'pop-title' }, 'Escala do mundo'), h('div', { class: 'pop-row' }, minus, this.scaleInput, plus));
+    this.liftInput = h('input', { type: 'range', min: '0', max: '100', value: '45', 'aria-label': 'Altura da ilha' }) as HTMLInputElement;
+    this.liftInput.addEventListener('input', () => handlers.onLift(Number(this.liftInput.value) / 100));
+    const down = btn('arrowDown', 'Abaixar a ilha', 'mini-btn');
+    const up = btn('arrowUp', 'Subir a ilha', 'mini-btn');
+    down.addEventListener('click', () => this.nudgeLift(-0.1));
+    up.addEventListener('click', () => this.nudgeLift(0.1));
+    this.scalePop = h(
+      'div',
+      { class: 'popover pop-scale', role: 'dialog', 'aria-label': 'Tamanho e altura' },
+      h('p', { class: 'pop-title' }, 'Tamanho do mundo'),
+      h('div', { class: 'pop-row' }, minus, this.scaleInput, plus),
+      h('p', { class: 'pop-title' }, 'Altura da ilha'),
+      h('div', { class: 'pop-row' }, down, this.liftInput, up),
+    );
 
     // explore tray
     const rl = btn('rotateLeft', 'Girar para a esquerda', 'mini-btn');
@@ -184,6 +200,16 @@ export class Overlay {
 
   setScaleValue(v: number) {
     this.scaleInput.value = String(Math.round(v * 100));
+  }
+
+  setLiftValue(v: number) {
+    this.liftInput.value = String(Math.round(v * 100));
+  }
+
+  private nudgeLift(d: number) {
+    const v = Math.min(1, Math.max(0, Number(this.liftInput.value) / 100 + d));
+    this.setLiftValue(v);
+    this.handlers.onLift(v);
   }
 
   setAutoRotate(on: boolean, available: boolean) {
