@@ -1,0 +1,4 @@
+{
+  "$comment": "Modelos GLB opcionais. O mundo padrão é 100% procedural. Exemplo: { \"src\": \"models/moinho.glb\", \"position\": [0.55, 0.03, 0.55], \"rotationY\": 0.4, \"scale\": 0.05 }",
+  "models": []
+}

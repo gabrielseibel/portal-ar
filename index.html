@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+    <meta name="theme-color" content="#07060d" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="description" content="PORTAL — abra uma passagem para um pequeno mundo fantástico sobre a sua mesa. Realidade aumentada direto no navegador, sem instalar nada." />
+    <meta property="og:title" content="PORTAL" />
+    <meta property="og:description" content="Existe outro mundo logo abaixo da sua realidade." />
+    <meta property="og:type" content="website" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <title>PORTAL</title>
+  </head>
+  <body>
+    <div id="app">
+      <div id="viewport" aria-hidden="true"></div>
+      <div id="ui-root">
+        <div id="input-layer"></div>
+      </div>
+
+      <section id="landing" aria-labelledby="title">
+        <div class="fog fog-a"></div>
+        <div class="fog fog-b"></div>
+        <canvas id="motes" aria-hidden="true"></canvas>
+        <div class="landing-content">
+          <div class="hero">
+            <div class="halo" aria-hidden="true">
+              <div class="halo-glow"></div>
+              <div class="halo-ring"></div>
+              <div class="halo-core"></div>
+              <svg class="halo-runes" viewBox="0 0 400 400">
+                <defs><path id="rune-path" d="M200,200 m-176,0 a176,176 0 1,1 352,0 a176,176 0 1,1 -352,0" /></defs>
+                <text><textPath href="#rune-path" textLength="1100">ᚠ ᚢ ᚦ ᚨ ᚱ ᚲ ᚷ ᚹ ᚺ ᚾ ᛁ ᛃ ᛇ ᛈ ᛉ ᛊ ᛏ ᛒ ᛖ ᛗ ᛚ ᛜ ᛞ ᛟ ✦ ᚠ ᚢ ᚦ ᚨ ᚱ ᚲ ᚷ ᚹ ᚺ ᚾ ᛁ ᛃ ᛇ ✦</textPath></text>
+              </svg>
+            </div>
+            <p class="eyebrow">Uma passagem no seu mundo real</p>
+            <h1 id="title" class="title" aria-label="Portal"><span>P</span><span>O</span><span>R</span><span>T</span><span>A</span><span>L</span></h1>
+          </div>
+          <p class="subtitle">Existe outro mundo logo abaixo da sua realidade.</p>
+          <div class="cta-group">
+            <button id="open-portal" class="cta" type="button"><span class="cta-shine"></span><span class="cta-label">ABRIR MEU PORTAL</span></button>
+            <button id="explore-3d" class="ghost" type="button">Explorar sem câmera</button>
+          </div>
+          <p id="capability" class="capability" role="status" aria-live="polite"><span class="dot"></span><span class="cap-text">Verificando seu dispositivo…</span></p>
+        </div>
+
+        <footer class="landing-footer">
+          <a href="./marcador.html" target="_blank" rel="noopener" class="foot-link">Marcador para imprimir</a>
+          <span class="sep">·</span>
+          <label class="foot-link quality-label">Qualidade
+            <select id="quality-select" aria-label="Qualidade gráfica">
+              <option value="auto">Automática</option>
+              <option value="economico">Econômico</option>
+              <option value="equilibrado">Equilibrado</option>
+              <option value="alto">Alto</option>
+            </select>
+          </label>
+        </footer>
+      </section>
+    </div>
+    <noscript><p class="noscript">O PORTAL precisa de JavaScript para abrir.</p></noscript>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
