@@ -384,6 +384,92 @@ console.log(`\nPORTAL e2e — serving dist at ${ORIGIN}${BASE}\n`);
   await browser.close();
 }
 
+// ================================================================ suite E: Vale Alecrim (second world)
+{
+  const browser = await chromium.launch({ args: GL_ARGS });
+  const page = await browser.newPage({ viewport: { width: 900, height: 700 } });
+  const errors = [];
+  watchErrors(page, errors);
+  const W = 'p.stage.world';
+  await test('vale: seletor de mundo e abertura do portal', async () => {
+    await page.goto(URL_);
+    await page.click('.world-opt[data-world="vila"]');
+    assert((await page.getAttribute('.world-opt[data-world="vila"]', 'aria-checked')) === 'true', 'picker');
+    await page.click('#explore-3d');
+    await page.waitForFunction(() => window.__portal?.phase === 'open', null, { timeout: 180000 });
+    assert((await page.evaluate(() => window.__portal.stage.kind)) === 'vila', 'world kind');
+    await page.evaluate(() => {
+      const p = window.__portal;
+      p.explore.controls.autoRotate = false;
+      p.engine.camera.position.set(0.1, 2.5, 2.2);
+      p.explore.controls.target.set(0, 1.0, 0);
+      p.explore.controls.update();
+      p.stage.world.timeScale = 0;
+    });
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: path.join(out, 'e2e-vale.png') });
+  });
+  await test('vale: moradores falam ao toque', async () => {
+    await page.evaluate(() => { const v = window.__portal.stage.world.villagers.find((x) => x.name === 'Dalva'); v.speed = 0; });
+    const hit = await tapObject(page, `${W}.villagers.find((v) => v.name === 'Dalva').p.hitProxy`);
+    assert(hit === 'npc:Dalva', 'hit ' + hit);
+    await page.waitForSelector('.speech.on');
+    assert((await page.textContent('.speech')).startsWith('Dalva:'), 'speech');
+  });
+  await test('vale: colheita, galinheiro, estações e relógio', async () => {
+    await page.evaluate(() => window.__portal.discoveries.reset());
+    await page.evaluate(() => window.__portal.stage.world.crops.forEach((c) => c.plots.forEach((pl) => (pl.g = 1))));
+    assert((await tapObject(page, `${W}.proxies.field`)) === 'field', 'field');
+    const left = await page.evaluate(() => window.__portal.stage.world.crops.flatMap((c) => c.plots).filter((pl) => pl.g > 0.7).length);
+    assert(left === 0, 'harvested ' + left);
+    assert((await tapObject(page, `${W}.proxies.coop`)) === 'coop', 'coop');
+    const season = await page.evaluate(() => window.__portal.stage.world.season);
+    assert((await tapObject(page, `${W}.proxies.ancient`)) === 'ancient', 'ancient tree');
+    assert((await page.evaluate(() => window.__portal.stage.world.season)) === (season + 1) % 4, 'season advanced');
+    const t0 = await page.evaluate(() => window.__portal.stage.world.timeOfDay);
+    assert((await tapObject(page, `${W}.proxies.tower`)) === 'tower', 'tower');
+    const t1 = await page.evaluate(() => window.__portal.stage.world.timeOfDay);
+    assert(Math.abs(((t1 - t0 + 1) % 1) - 0.25) < 0.01, 'time skipped ' + t0 + '→' + t1);
+  });
+  await test('vale: segredos (carta misteriosa, tesouro, mina) + painel', async () => {
+    for (let i = 0; i < 4; i++) {
+      await page.evaluate(() => (window.__portal.stage.world.letterReady = true));
+      assert((await tapObject(page, `${W}.proxies.mailbox`)) === 'mailbox', 'mailbox');
+    }
+    assert(await page.evaluate(() => window.__portal.discoveries.has('vale-carta')), 'letter discovery');
+    await page.click('.card .card-close');
+    await page.waitForTimeout(450);
+    assert((await tapObject(page, `${W}.proxies.treasure`)) === 'treasure', 'treasure');
+    await page.waitForTimeout(1200);
+    assert(await page.evaluate(() => window.__portal.discoveries.has('vale-tesouro')), 'treasure discovery');
+    await page.evaluate(() => { const p = window.__portal; p.engine.camera.position.set(0.0, 1.45, 0.4); p.explore.controls.target.set(-0.09, 1.1, -0.5); p.explore.controls.update(); });
+    await page.waitForTimeout(300);
+    assert((await tapObject(page, `${W}.proxies.mine`)) === 'mine', 'mine');
+    assert(await page.evaluate(() => window.__portal.discoveries.has('vale-mina')), 'mine discovery');
+    await page.click('.dock-btn[aria-label="Descobertas"]');
+    await page.waitForSelector('.panel-wrap.on');
+    assert((await page.textContent('.panel-eyebrow')).includes('3 de 7'), 'panel ' + (await page.textContent('.panel-eyebrow')));
+    await page.click('.panel-close');
+  });
+  await test('vale: pesca no lago', async () => {
+    await page.evaluate(() => { const p = window.__portal; p.engine.camera.position.set(-0.5, 1.7, 1.4); p.explore.controls.target.set(-0.45, 1.05, 0.6); p.explore.controls.update(); });
+    await page.waitForTimeout(300);
+    assert((await tapObject(page, `${W}.proxies.pond`)) === 'pond', 'pond');
+    await page.waitForFunction(() => /Fisgou|Dourado/.test(document.querySelector('.hint')?.textContent + document.querySelector('.card')?.textContent), null, { timeout: 30000 });
+  });
+  await test('troca de mundo sem recarregar (vale → ilha)', async () => {
+    await page.click('.topbar .icon-btn[aria-label="Sair da experiência"]');
+    await page.waitForSelector('#landing:not(.hidden):not(.leaving)');
+    await page.click('.world-opt[data-world="fantasia"]');
+    await page.click('#explore-3d');
+    await page.waitForFunction(() => window.__portal?.stage.kind === 'fantasia' && window.__portal.phase !== 'hidden', null, { timeout: 120000 });
+  });
+  await test('sem erros de JavaScript (suite Vale Alecrim)', async () => {
+    assert(errors.length === 0, errors.join(' | '));
+  });
+  await browser.close();
+}
+
 // ================================================================ 12. GitHub Pages sub-directory
 await test('12. publicação em subdiretório (/portal-ar/): nenhum 404, marcador acessível', async () => {
   const res = await fetch(`${ORIGIN}${BASE}marcador.html`);

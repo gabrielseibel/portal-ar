@@ -2,11 +2,14 @@ import * as THREE from 'three';
 import { Engine } from '../systems/Engine';
 import { QUALITY, type QualitySettings, type QualityLevel } from '../systems/Quality';
 import { Haptics } from '../systems/Haptics';
-import { Stage } from '../scenes/Stage';
+import { Stage, type WorldKind } from '../scenes/Stage';
 import { Overlay, type InstructionSpec, type Action } from '../ui/Overlay';
 import { InteractionSystem } from '../interactions/InteractionSystem';
 import { Gestures } from '../interactions/Gestures';
-import { Discoveries, DISCOVERIES, type DiscoveryId } from '../interactions/Discoveries';
+import { Discoveries, type DiscoveryId } from '../interactions/Discoveries';
+import { World } from '../world/World';
+import { FarmWorld } from '../world/farm/FarmWorld';
+import { FARM_DISCOVERIES } from '../world/farm/discoveries';
 import type { AudioEngine } from '../audio/AudioEngine';
 import type { ARMode, ModeKind, PlacementStatus } from '../ar/ARMode';
 import { CameraFeed, CameraError, preauthorizeCamera } from '../ar/CameraFeed';
@@ -36,9 +39,12 @@ const DRAGON_LINE = 'Finalmente alguém encontrou meu mundo!';
  */
 export class Experience {
   readonly engine: Engine;
-  readonly stage: Stage;
+  stage: Stage;
   readonly overlay: Overlay;
-  readonly discoveries = new Discoveries();
+  discoveries: Discoveries;
+  worldKind: WorldKind;
+  /** Object the speech bubble follows on screen. */
+  private speechTarget: THREE.Object3D | null = null;
   private interactions = new InteractionSystem();
   private gestures: Gestures;
   private feed: CameraFeed;
@@ -62,23 +68,43 @@ export class Experience {
   private lastXRError = '';
   onExit: () => void = () => {};
 
-  static async create(audio: AudioEngine, quality: QualitySettings) {
-    const exp = new Experience(audio, quality);
+  static async create(audio: AudioEngine, quality: QualitySettings, kind: WorldKind = 'fantasia') {
+    const exp = new Experience(audio, quality, kind);
     await nextFrame();
-    // compile every shader up front (three skips invisible objects, so reveal them briefly)
-    const st = exp.stage;
+    await exp.warmupStage();
+    void loadOptionalModels(exp.stage.world.group);
+    return exp;
+  }
+
+  /** Compile every shader up front (three skips invisible objects, so reveal them briefly). */
+  private async warmupStage() {
+    const st = this.stage;
     const hidden = [st.anchor, st.world.group, st.sky.group, st.birds.group, st.dragon.root];
     const prev = hidden.map((o) => o.visible);
     hidden.forEach((o) => (o.visible = true));
-    await exp.engine.warmup();
+    await this.engine.warmup();
     hidden.forEach((o, i) => (o.visible = prev[i]));
-    void loadOptionalModels(st.world.group);
-    return exp;
+  }
+
+  /** Swaps the world inside the portal (only while no experience is running). */
+  async setWorld(kind: WorldKind) {
+    if (kind === this.worldKind) return;
+    this.overlay.loading(true, 'Tecendo o mundo…');
+    await nextFrame();
+    this.stage.dispose(this.engine.scene);
+    this.explore?.controls.dispose();
+    this.explore = null;
+    this.worldKind = kind;
+    this.stage = new Stage(this.engine.scene, this.quality, kind);
+    this.bindWorld();
+    await this.warmupStage();
+    this.overlay.loading(false);
   }
 
   private constructor(
     private audio: AudioEngine,
     quality: QualitySettings,
+    kind: WorldKind,
   ) {
     this.quality = quality;
     const viewport = document.getElementById('viewport')!;
@@ -87,7 +113,9 @@ export class Experience {
     this.engine = new Engine(viewport, quality);
     this.engine.renderer.localClippingEnabled = true;
     this.feed = new CameraFeed(viewport);
-    this.stage = new Stage(this.engine.scene, quality);
+    this.worldKind = kind;
+    this.stage = new Stage(this.engine.scene, quality, kind);
+    this.discoveries = new Discoveries();
     this.engine.camera.position.set(0.6, 2.4, 5.2);
     this.engine.camera.lookAt(0, 1, 0);
 
@@ -126,21 +154,11 @@ export class Experience {
       onRestart: () => this.restart(),
       onDiscoveries: () => {
         this.audio.ui();
-        this.overlay.openPanel(DISCOVERIES, (id) => this.discoveries.has(id), () => this.discoveries.reset());
+        this.overlay.openPanel(this.discoveries.defs, (id) => this.discoveries.has(id), () => this.discoveries.reset());
       },
     });
     this.overlay.setMuted(this.audio.muted);
     this.audio.onChange = (m) => this.overlay.setMuted(m);
-    this.overlay.setDiscoveryCount(this.discoveries.count, this.discoveries.total);
-    this.discoveries.onChange = () => this.overlay.setDiscoveryCount(this.discoveries.count, this.discoveries.total);
-    this.discoveries.onFound = (d, n) => {
-      this.audio.discovery();
-      Haptics.success();
-      this.overlay.toast('Nova descoberta', `${d.name} · ${n}/${this.discoveries.total}`, d.icon as IconName);
-      if (n === this.discoveries.total) {
-        setTimeout(() => this.overlay.card('Todos os segredos', 'Coleção completa', 'Você encontrou todas as descobertas do Portal. O mundo agora também conhece você.', 10000), 2500);
-      }
-    };
 
     // gestures
     this.gestures = new Gestures(input);
@@ -169,6 +187,31 @@ export class Experience {
       },
     };
 
+    this.bindWorld();
+
+    // engine hooks
+    this.engine.add((dt, t, frame) => this.update(dt, t, frame));
+    this.engine.onContextLost = () => this.overlay.loading(true, 'Restaurando os gráficos…');
+    this.engine.onContextRestored = () => this.overlay.loading(false);
+    this.engine.onSlowFrames = () => this.degradeQuality();
+
+    (window as unknown as { __portal: unknown }).__portal = this;
+  }
+
+  /** Wires the current Stage/world into the experience (events, discoveries, touch targets). */
+  private bindWorld() {
+    this.discoveries = this.worldKind === 'vila' ? new Discoveries(FARM_DISCOVERIES, 'discoveries.vila') : new Discoveries();
+    this.overlay.setDiscoveryCount(this.discoveries.count, this.discoveries.total);
+    this.discoveries.onChange = () => this.overlay.setDiscoveryCount(this.discoveries.count, this.discoveries.total);
+    this.discoveries.onFound = (d, n) => {
+      this.audio.discovery();
+      Haptics.success();
+      this.overlay.toast('Nova descoberta', `${d.name} · ${n}/${this.discoveries.total}`, d.icon as IconName);
+      if (n === this.discoveries.total) {
+        setTimeout(() => this.overlay.card('Todos os segredos', 'Coleção completa', 'Você encontrou todas as descobertas do Portal. O mundo agora também conhece você.', 10000), 2500);
+      }
+    };
+
     // stage events
     this.stage.onFlash = () => {
       this.overlay.flash();
@@ -190,19 +233,13 @@ export class Experience {
     };
     this.stage.dragon.onFlame = () => this.audio.flame(this.worldPos(this.stage.dragon.root));
     this.stage.dragon.onWingBeat = () => this.audio.wingBeat(this.worldPos(this.stage.dragon.root));
-    this.stage.world.spirit.onAppear = () => {
-      if (!this.discoveries.has('espirito')) this.overlay.hint('Algo brilhante se move na campina…', 5000);
-    };
-
-    this.registerInteractions();
-
-    // engine hooks
-    this.engine.add((dt, t, frame) => this.update(dt, t, frame));
-    this.engine.onContextLost = () => this.overlay.loading(true, 'Restaurando os gráficos…');
-    this.engine.onContextRestored = () => this.overlay.loading(false);
-    this.engine.onSlowFrames = () => this.degradeQuality();
-
-    (window as unknown as { __portal: unknown }).__portal = this;
+    this.interactions.clear();
+    if (this.stage.world instanceof World) {
+      this.stage.world.spirit.onAppear = () => {
+        if (!this.discoveries.has('espirito')) this.overlay.hint('Algo brilhante se move na campina…', 5000);
+      };
+      this.registerInteractions();
+    } else this.registerFarmInteractions(this.stage.world);
   }
 
   // ------------------------------------------------------------------ helpers
@@ -565,6 +602,10 @@ export class Experience {
 
   private startAmbience() {
     const w = this.stage.world;
+    if (w instanceof FarmWorld) {
+      this.audio.startAmbience(w.sounds.map((p) => w.group.localToWorld(p.clone())));
+      return;
+    }
     const fall = this.worldPos(w.waterfallProxy);
     const edge = this.stage.root.localToWorld(new THREE.Vector3(-0.46, 0.4, 0.98));
     this.audio.startAmbience([fall, edge]);
@@ -583,13 +624,19 @@ export class Experience {
     this.lastTap = this.interactions.tapScreen(x - r.left, y - r.top, r.width, r.height, this.mode.pickCamera());
   }
 
+  private say(text: string, target: THREE.Object3D, seconds = 4.5) {
+    this.speechTarget = target;
+    this.overlay.speech(text, seconds * 1000);
+    this.speechUntil = this.elapsed + seconds;
+  }
+
   private discover(id: DiscoveryId) {
     this.discoveries.find(id);
   }
 
   private registerInteractions() {
     const st = this.stage;
-    const w = st.world;
+    const w = st.world as World;
     const t = () => this.elapsed;
     const add = this.interactions.add.bind(this.interactions);
 
@@ -601,8 +648,7 @@ export class Experience {
         st.dragon.react();
         this.audio.dragonRoar(this.worldPos(st.dragon.root));
         Haptics.rumble();
-        this.overlay.speech(DRAGON_LINE, 4500);
-        this.speechUntil = this.elapsed + 4.5;
+        this.say(DRAGON_LINE, st.dragon.mouth, 4.5);
         this.overlay.hint(null);
       },
     });
@@ -732,6 +778,215 @@ export class Experience {
     });
   }
 
+
+  // ------------------------------------------------------------------ Vale Alecrim interactions
+  private registerFarmInteractions(w: FarmWorld) {
+    const st = this.stage;
+    const add = this.interactions.add.bind(this.interactions);
+    const P = w.proxies;
+    const burstAt = (o: THREE.Object3D | THREE.Vector3, n: number, color: string, colorEnd: string, speed = 0.3, gravity = 0) =>
+      st.bursts.burst(this.toStage(o instanceof THREE.Vector3 ? w.group.localToWorld(o.clone()) : o), n, speed, { life: 1.3, size: 0.022, color, colorEnd, gravity });
+    let coopTaps = 0;
+    let casts = 0;
+    let letterIndex = 0;
+    let seasonHint = false;
+
+    // villagers talk (and stop walking for a moment)
+    for (const v of w.villagers) {
+      let line = 0;
+      add({
+        name: `npc:${v.name}`,
+        object: v.p.hitProxy,
+        priority: 3,
+        onTap: () => {
+          v.pause = Math.max(v.pause, 3.5);
+          this.audio.voice(this.worldPos(v.p.root), v.role === 'criança' ? 1.5 : v.name === 'Bento' || v.name === 'Seu Olavo' ? 0.8 : 1.1);
+          this.say(`${v.name}: “${v.lines[line++ % v.lines.length]}”`, v.p.head, 4.5);
+        },
+      });
+    }
+    add({
+      name: 'field',
+      object: P.field,
+      onTap: () => {
+        const picked = w.harvest();
+        if (w.season === 3) return this.overlay.hint('No inverno a horta descansa. Toque na Árvore Anciã para mudar a estação.', 4500);
+        if (!picked.length) return this.overlay.hint('A horta ainda está crescendo… volte daqui a pouco.', 3500);
+        for (const p of picked) burstAt(p, 6, '#fff3b0', '#7fc75a', 0.25, 0.4);
+        this.audio.harvest(this.worldPos(P.field), picked.length);
+        Haptics.soft();
+        this.overlay.hint(`Você colheu ${picked.length} ${picked.length === 1 ? 'planta' : 'plantas'}!`, 3000);
+      },
+    });
+    add({
+      name: 'coop',
+      object: P.coop,
+      onTap: () => {
+        w.excite('chickens');
+        this.audio.cluck(this.worldPos(P.coop));
+        coopTaps++;
+        if (coopTaps >= 2 && !w.goldenVisible && (coopTaps >= 4 || Math.random() < 0.45) && w.showGolden()) {
+          this.overlay.hint('Uma galinha dourada apareceu no galinheiro!', 4000);
+        }
+      },
+    });
+    add({
+      name: 'golden',
+      object: P.golden,
+      priority: 4,
+      onTap: () => {
+        burstAt(P.golden, 30, '#fff0b0', '#ffb52e', 0.35);
+        this.audio.cluck(this.worldPos(P.golden), 1.4);
+        this.discover('vale-galinha');
+        setTimeout(() => w.hideGolden(), 2500);
+      },
+    });
+    add({ name: 'cows', object: P.cows, onTap: () => (w.excite('cows'), this.audio.moo(this.worldPos(P.cows))) });
+    add({ name: 'cat', object: P.cat, priority: 3, onTap: () => (w.wakeCat(), this.audio.meow(this.worldPos(P.cat))) });
+
+    // fishing
+    const FISH = ['Lambari-prateado', 'Tilápia-do-vale', 'Carpa-sol', 'Bagre-ranzinza', 'Piaba-arco-íris'];
+    w.onCatch = (at) => {
+      this.audio.splash(w.group.localToWorld(at.clone()));
+      burstAt(at, 14, '#e9fbff', '#7fc7e8', 0.2, 0.6);
+      casts++;
+      const legendary = !this.discoveries.has('vale-peixe') && (casts >= 6 || (casts >= 3 && Math.random() < 0.3));
+      if (legendary) {
+        this.overlay.card('Dourado Ancião', 'Pesca lendária', 'Escamas cor de sol, olhos calmos como o lago. Ele te olha um instante… e volta para o fundo.', 7000);
+        this.discover('vale-peixe');
+      } else {
+        const night = w.isNight && Math.random() < 0.5;
+        const name = night ? 'Peixe-lanterna' : FISH[Math.floor(Math.random() * FISH.length)];
+        this.overlay.hint(`Fisgou: ${name}!${night ? ' (só aparece à noite)' : ''}`, 3500);
+      }
+    };
+    add({
+      name: 'pond',
+      object: P.pond,
+      onTap: () => {
+        if (w.cast()) this.audio.splash(this.worldPos(P.pond), 0.4);
+      },
+    });
+
+    // mail
+    const LETTERS: Array<[string, string]> = [
+      ['Da Celeste, a padeira', 'Bem-vinda ao vale! Passe na padaria: o primeiro pão de queijo é sempre por conta da casa.'],
+      ['Da prefeita Dalva', 'Lembrete: na próxima lua cheia teremos festa na praça. Traga o que a sua horta tiver de melhor!'],
+      ['Do Bento, o ferreiro', 'Sua enxada está pronta. Ficou tão afiada que corta até preguiça de segunda-feira.'],
+    ];
+    add({
+      name: 'mailbox',
+      object: P.mailbox,
+      onTap: () => {
+        if (!w.letterWaiting) return this.overlay.hint('Nenhuma carta nova. A bandeirinha vermelha avisa quando chegar.', 3500);
+        w.takeLetter();
+        this.audio.ui();
+        if (letterIndex < LETTERS.length) {
+          const [from, text] = LETTERS[letterIndex++];
+          this.overlay.card('Uma carta chegou', from, text, 9000);
+        } else {
+          this.overlay.card('Carta sem remetente', 'Papel antigo, tinta desbotada', '“Onde a areia encontra a água e o X marca o lugar, o avô guardou o que o vale não deve esquecer.”', 11000);
+          this.discover('vale-carta');
+        }
+      },
+    });
+
+    // secrets
+    add({
+      name: 'treasure',
+      object: P.treasure,
+      priority: 3,
+      onTap: () => {
+        if (!w.digTreasure()) return;
+        this.audio.chest(this.worldPos(P.treasure));
+        setTimeout(() => {
+          for (let i = 0; i < 30; i++) st.bursts.emit(this.toStage(P.treasure), { x: (Math.random() - 0.5) * 0.3, y: 0.4 + Math.random() * 0.3, z: (Math.random() - 0.5) * 0.3 }, { life: 1.2, size: 0.02, color: '#ffe08a', colorEnd: '#d9a23a', gravity: 1.1, drag: 0.4 });
+          this.discover('vale-tesouro');
+        }, 900);
+      },
+    });
+    add({
+      name: 'mine',
+      object: P.mine,
+      priority: 3,
+      onTap: () => {
+        w.openMine();
+        burstAt(P.mine, 30, '#bff8ff', '#4fd8ff', 0.25);
+        this.audio.crystalChime(this.worldPos(P.mine), 2);
+        this.discover('vale-mina');
+      },
+    });
+    add({
+      name: 'mushroom',
+      object: P.mushroom,
+      priority: 2,
+      onTap: () => {
+        w.bounceMushroom();
+        burstAt(P.mushroom, 24, '#ffd1d1', '#ff5a4a', 0.25, -0.1);
+        this.audio.mushroomChoir(this.worldPos(P.mushroom));
+        this.discover('vale-cogumelo');
+      },
+    });
+    add({
+      name: 'spirit',
+      object: P.spirit,
+      priority: 4,
+      enabled: () => w.spiritVisible,
+      onTap: () => {
+        burstAt(P.spirit, 36, '#dffcff', '#5ff2d6', 0.35, -0.15);
+        this.audio.spiritChime(this.worldPos(P.spirit));
+        this.discover('vale-espirito');
+      },
+    });
+
+    // village life
+    add({
+      name: 'ancient',
+      object: P.ancient,
+      onTap: () => {
+        const name = w.nextSeason();
+        burstAt(P.ancient, 30, ['#ffc2dc', '#fff2a8', '#e8913a', '#ffffff'][w.season], '#7fc75a', 0.3);
+        this.audio.crystalChime(this.worldPos(P.ancient), w.season * 2);
+        this.overlay.toast('A estação mudou', `${name} chegou ao Vale Alecrim`, 'sparkle');
+        if (!seasonHint) {
+          seasonHint = true;
+          setTimeout(() => this.overlay.hint('Toque de novo na Árvore Anciã para a próxima estação.', 4000), 1500);
+        }
+      },
+    });
+    add({
+      name: 'tower',
+      object: P.tower,
+      onTap: () => {
+        w.skipTime(0.25);
+        this.audio.villageBells(this.worldPos(P.tower));
+        this.overlay.hint(`O sino tocou — agora são ${w.clock}${w.isNight ? ' (noite)' : ''}.`, 3500);
+      },
+    });
+    const info: Record<string, [string, string, string]> = {
+      bakery: ['Padaria Fornalha', 'Da Celeste', 'Pão de queijo, bolo de fubá e sonhos de doce de leite. O cheiro chega até a fazenda nas manhãs de vento.'],
+      tavern: ['Taverna Caneca de Cobre', 'O coração da vila', 'Música aos sábados, sopa de abóbora no inverno e histórias que crescem a cada caneca.'],
+      store: ['Armazém do Vale', 'Sementes e miudezas', 'Sementes da estação, fitas, botões e aquele doce de goiaba que acaba sempre antes do fim de semana.'],
+      forge: ['Forja do Bento', 'Ferro e fogo', 'Ferraduras, enxadas e um sino novo para a torre, se o Bento um dia terminar de polir.'],
+      library: ['Biblioteca do Vale', 'Do Seu Olavo', 'Mapas antigos, diários de fazendeiros e um livro sobre uma mina esquecida atrás da cachoeira.'],
+      notices: ['Quadro de avisos', 'Praça central', '“Procura-se: galinha fujona.” · “Festa da colheita na próxima lua cheia!” · “Alguém viu um X na areia?”'],
+    };
+    for (const [key, [title, sub, text]] of Object.entries(info)) {
+      add({
+        name: key,
+        object: P[key],
+        onTap: () => {
+          this.overlay.card(title, sub, text, 9000);
+          if (key === 'forge') {
+            this.audio.anvil(this.worldPos(P.forge));
+            burstAt(P.forge, 26, '#ffe2a1', '#ff6a2a', 0.35, 0.8);
+          } else if (key === 'tavern') this.audio.villageBells(this.worldPos(P.tavern));
+          else this.audio.ui();
+        },
+      });
+    }
+  }
+
   // ------------------------------------------------------------------ frame
   private update(dt: number, t: number, frame?: XRFrame) {
     this.elapsed = t;
@@ -770,7 +1025,7 @@ export class Experience {
 
     // speech bubble follows the dragon's head on screen
     if (this.elapsed < this.speechUntil) {
-      const p = this.stage.dragon.mouth.getWorldPosition(new THREE.Vector3()).project(cam);
+      const p = (this.speechTarget ?? this.stage.dragon.mouth).getWorldPosition(new THREE.Vector3()).project(cam);
       const r = this.uiRoot.getBoundingClientRect();
       if (p.z < 1) this.overlay.placeSpeech((p.x * 0.5 + 0.5) * r.width, (-p.y * 0.5 + 0.5) * r.height - 30);
       else this.overlay.placeSpeech(null, null);

@@ -28,6 +28,10 @@ export const Icon = {
   spirit: svg('<path d="M12 21c-4 0-7-3-7-7 0-3 2-5 3-8 1 2 2 3 4 3 0-2 1-4 3-6 1 3 3 5 3 9 0 5-3 9-6 9z"/><circle cx="10" cy="14" r=".7" fill="currentColor"/><circle cx="14" cy="14" r=".7" fill="currentColor"/>'),
   bird: svg('<path d="M2 13c4 0 6-2 8-5 1 3 3 4 6 4l6-3-3 5c-2 3-6 4-9 3l-3 3v-4c-2 0-4-1-5-3z"/>'),
   mushroom: svg('<path d="M3 12a9 7 0 0118 0z"/><path d="M9.5 12v6a2.5 2.5 0 005 0v-6"/><circle cx="8" cy="9" r="1"/><circle cx="14" cy="7.5" r="1.2"/>'),
+  pickaxe: svg('<path d="M4 9c4-4 11-5 16-2-4-1-8 0-11 3"/><path d="M12 8l-8 12"/>'),
+  fish: svg('<path d="M3 12c3-4 8-6 13-3l5-3-1 6 1 6-5-3c-5 3-10 1-13-3z"/><circle cx="14" cy="11" r=".8" fill="currentColor"/>'),
+  letter: svg('<rect x="3" y="6" width="18" height="13" rx="1.5"/><path d="M3.5 7l8.5 6.5L20.5 7"/>'),
+  sun: svg('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'),
 } as const;
 
 export type IconName = keyof typeof Icon;

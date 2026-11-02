@@ -13,6 +13,8 @@ import { describeCapabilities, startMotes } from './ui/Landing';
 import { loadQualityPreference, resolveQuality, saveQualityPreference, type QualityPreference } from './systems/Quality';
 import { Haptics } from './systems/Haptics';
 import { idle } from './utils/dom';
+import { Storage } from './systems/Storage';
+import type { WorldKind } from './scenes/Stage';
 import type { Experience } from './app/Experience';
 
 const audio = new AudioEngine();
@@ -25,6 +27,20 @@ const motes = startMotes(document.getElementById('motes') as HTMLCanvasElement);
 const params = new URLSearchParams(location.search);
 
 let caps: Capabilities | null = null;
+const urlWorld = params.get('world');
+let world: WorldKind = urlWorld === 'vila' || urlWorld === 'fantasia' ? urlWorld : Storage.get<WorldKind>('world', 'fantasia');
+const worldButtons = [...document.querySelectorAll<HTMLButtonElement>('.world-opt')];
+function selectWorld(k: WorldKind) {
+  world = k;
+  Storage.set('world', k);
+  for (const b of worldButtons) {
+    const on = b.dataset.world === k;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-checked', String(on));
+  }
+}
+worldButtons.forEach((b) => b.addEventListener('click', () => (selectWorld(b.dataset.world as WorldKind), Haptics.tap())));
+selectWorld(world);
 let experience: Promise<Experience> | null = null;
 let busy = false;
 
@@ -38,7 +54,7 @@ qualitySel.addEventListener('change', async () => {
 function getExperience() {
   if (!experience) {
     experience = import('./app/Experience')
-      .then((m) => m.Experience.create(audio, resolveQuality()))
+      .then((m) => m.Experience.create(audio, resolveQuality(), world))
       .then((exp) => {
         exp.onExit = showLanding;
         return exp;
@@ -85,6 +101,7 @@ openBtn.addEventListener('click', async () => {
   const expP = getExperience();
   hideLanding();
   const exp = await expP;
+  await exp.setWorld(world);
   const forced = params.get('mode');
   if (forced === 'marker' || forced === 'manual') {
     await exp.startCamera(forced);
@@ -106,6 +123,7 @@ exploreBtn.addEventListener('click', async () => {
   const expP = getExperience();
   hideLanding();
   const exp = await expP;
+  await exp.setWorld(world);
   await exp.startExplore();
 });
 

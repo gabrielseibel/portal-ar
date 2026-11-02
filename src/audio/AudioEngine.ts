@@ -616,6 +616,106 @@ export class AudioEngine {
     }
   }
 
+
+  /** Short babble for villagers (pitch scales the voice). */
+  voice(pos?: Vec3, pitch = 1) {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    const out = this.panner(pos);
+    for (let i = 0; i < 5; i++) {
+      const f = (260 + Math.random() * 160) * pitch;
+      this.tone('triangle', f, f * (0.85 + Math.random() * 0.3), t + i * 0.085, 0.07, 0.07, out);
+    }
+  }
+
+  cluck(pos?: Vec3, pitch = 1) {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    const out = this.panner(pos);
+    for (let i = 0; i < 4; i++) {
+      const at = t + i * 0.11 + Math.random() * 0.03;
+      this.tone('square', 620 * pitch, 380 * pitch, at, 0.05, 0.035, out);
+      this.noiseBurst(at, 0.04, 0.03, 'bandpass', 1800 * pitch, 3, out);
+    }
+  }
+
+  moo(pos?: Vec3) {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    const out = this.panner(pos);
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(110, t);
+    o.frequency.linearRampToValueAtTime(135, t + 0.4);
+    o.frequency.linearRampToValueAtTime(95, t + 1.1);
+    const f = ctx.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.setValueAtTime(400, t);
+    f.frequency.linearRampToValueAtTime(900, t + 0.4);
+    f.frequency.linearRampToValueAtTime(350, t + 1.1);
+    const g = gain(ctx, 0, out);
+    o.connect(f).connect(g);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.18, t + 0.15);
+    g.gain.setValueAtTime(0.18, t + 0.8);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 1.2);
+    o.start(t);
+    o.stop(t + 1.25);
+  }
+
+  meow(pos?: Vec3) {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    const out = this.panner(pos);
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(520, t);
+    o.frequency.exponentialRampToValueAtTime(820, t + 0.18);
+    o.frequency.exponentialRampToValueAtTime(480, t + 0.5);
+    const f = ctx.createBiquadFilter();
+    f.type = 'bandpass';
+    f.Q.value = 4;
+    f.frequency.setValueAtTime(900, t);
+    f.frequency.linearRampToValueAtTime(1800, t + 0.2);
+    f.frequency.linearRampToValueAtTime(1000, t + 0.5);
+    const g = gain(ctx, 0, out);
+    o.connect(f).connect(g);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.22, t + 0.05);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
+    o.start(t);
+    o.stop(t + 0.6);
+  }
+
+  splash(pos?: Vec3, vol = 1) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const out = this.panner(pos);
+    this.noiseBurst(t, 0.35, 0.22 * vol, 'bandpass', 1200, 0.8, out, 400);
+    this.tone('sine', 700, 200, t, 0.12, 0.08 * vol, out);
+  }
+
+  anvil(pos?: Vec3) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const out = this.panner(pos);
+    for (let i = 0; i < 3; i++) {
+      this.bell(1200 + Math.random() * 80, t + i * 0.28, 0.12, 0.9, out, 0.3);
+      this.noiseBurst(t + i * 0.28, 0.05, 0.12, 'highpass', 3000, 1, out);
+    }
+  }
+
+  harvest(pos?: Vec3, count = 4) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const out = this.panner(pos);
+    for (let i = 0; i < Math.min(8, count); i++) this.tone('sine', 500 + i * 70, 900 + i * 90, t + i * 0.06, 0.09, 0.07, out);
+  }
+
   setListenerPosition(p: Vec3) {
     this.lastListener = { x: p.x, y: p.y, z: p.z };
   }
