@@ -59,6 +59,7 @@ export class Experience {
   private preferredCameraMode: 'marker' | 'manual' = 'marker';
   /** Name of the last tapped target (diagnostics / automated tests). */
   lastTap: string | null = null;
+  private lastXRError = '';
   onExit: () => void = () => {};
 
   static async create(audio: AudioEngine, quality: QualitySettings) {
@@ -277,12 +278,46 @@ export class Experience {
           onClick: async () => {
             this.overlay.instruction(null);
             this.audio.unlock();
-            if (!(await this.startXR())) await this.startCamera('marker', true);
+            if (!(await this.startXR())) this.xrFailed();
           },
         },
-        { label: 'Usar marcador', onClick: () => void this.startCamera('marker') },
       ],
     });
+  }
+
+  /** AR could not start: explain and let the visitor choose, instead of silently switching modes. */
+  private xrFailed() {
+    this.overlay.loading(false);
+    this.overlay.showChrome(true);
+    const why = this.lastXRError ? ` (${this.lastXRError})` : '';
+    this.overlay.sheet(
+      'A realidade aumentada não iniciou',
+      `O Chrome não conseguiu abrir o modo AR${why}. Verifique se o app “Google Play Services for AR” está instalado e atualizado na Play Store e tente de novo.`,
+      [
+        { label: 'Tentar de novo', primary: true, onClick: () => (this.overlay.closeSheet(), void this.startXRFlow()) },
+        { label: 'Explorar em 3D', onClick: () => (this.overlay.closeSheet(), void this.startExplore()) },
+        { label: 'Outras opções', onClick: () => (this.overlay.closeSheet(), this.chooseCameraMode(true)) },
+      ],
+    );
+  }
+
+  /**
+   * Devices without WebXR surface detection: explain the honest options.
+   * The printed marker is the only way to keep the world fixed in the room there.
+   */
+  chooseCameraMode(afterXRFailure = false) {
+    this.prepare('');
+    this.overlay.loading(false);
+    this.overlay.showChrome(false);
+    this.overlay.sheet(
+      afterXRFailure ? 'Como abrir o portal' : 'Seu navegador não detecta superfícies',
+      'Para o mundo ficar preso à mesa sem detecção de superfícies, o PORTAL precisa de uma referência: o marcador impresso (um quadrado preto e branco, como um QR code) que você coloca sobre a mesa. Sem ele, o mundo aparece sobre a câmera e acompanha apenas a rotação do celular, não os seus passos.',
+      [
+        { label: 'Usar sem marcador', primary: true, onClick: () => (this.overlay.closeSheet(), void this.startCamera('manual')) },
+        { label: 'Tenho o marcador impresso', onClick: () => (this.overlay.closeSheet(), void this.startCamera('marker')) },
+        { label: 'Explorar em 3D', onClick: () => (this.overlay.closeSheet(), void this.startExplore()) },
+      ],
+    );
   }
 
   /** Try WebXR immersive-ar with hit-test. Resolves false if unavailable/denied. */
@@ -301,6 +336,7 @@ export class Experience {
       return true;
     } catch (e) {
       console.warn('[xr] fallback', e);
+      this.lastXRError = (e as Error)?.name && (e as Error).name !== 'Error' ? (e as Error).name : String((e as Error)?.message ?? e).slice(0, 80);
       mode.stop();
       this.mode = null;
       this.engine.stop();
@@ -446,14 +482,14 @@ export class Experience {
             this.onPlacementStatus('surface');
           },
         });
-      actions.push({ label: 'Usar marcador', onClick: () => void this.runCameraMode('marker') });
+      actions.push({ label: 'Tenho o marcador impresso', onClick: () => void this.runCameraMode('marker') });
       if (s === 'aim-down') spec = { title: main, text: 'Incline o celular em direção à mesa.', visual: 'tilt', actions };
       else if (s === 'surface' || s === 'starting')
         spec = {
           title: main,
           text: manual.gyroscopeActive
-            ? 'Modo manual: aponte para onde o portal deve abrir e toque. A superfície não é detectada automaticamente.'
-            : 'Modo manual: arraste o anel até a sua mesa e toque para abrir. A superfície não é detectada automaticamente.',
+            ? 'Aponte para onde o portal deve abrir e toque. Sem detecção de superfícies: o mundo acompanha a rotação do celular, mas não os seus passos.'
+            : 'Arraste o anel até a sua mesa e toque para abrir. Sem detecção de superfícies: a superfície não é detectada automaticamente.',
           visual: 'tap',
           actions,
         };
@@ -764,7 +800,7 @@ export class Experience {
   async startBest() {
     const caps = await detectCapabilities();
     if (caps.webxrAR) return this.startXRFlow();
-    if (caps.camera) await this.startCamera(this.preferredCameraMode, caps.webxrAR);
+    if (caps.camera) this.chooseCameraMode();
     else this.cameraFailed(new CameraError(caps.secure ? 'notfound' : 'insecure', ''));
   }
 }

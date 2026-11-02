@@ -128,12 +128,16 @@ console.log(`\nPORTAL e2e — serving dist at ${ORIGIN}${BASE}\n`);
   await test('3. detecção de suporte WebXR (honesta: sem WebXR no headless)', async () => {
     await page.waitForFunction(() => !document.querySelector('.cap-text').textContent.includes('Verificando'));
     const txt = await page.textContent('.cap-text');
-    assert(!txt.includes('detecção de superfícies'), 'should not claim surface detection: ' + txt);
-    assert(txt.includes('Câmera disponível'), 'camera availability text: ' + txt);
+    assert(!txt.includes('com detecção de superfícies'), 'should not claim surface detection: ' + txt);
+    assert(txt.includes('Sem detecção de superfícies'), 'honest capability text: ' + txt);
+    assert(await page.isVisible('.marker-only'), 'marker link visible on devices without WebXR');
   });
 
-  await test('2+4. permissão de câmera concedida → modo AR com marcador', async () => {
+  await test('2+4. sem WebXR: opções explicadas → marcador → câmera ativa', async () => {
     await page.click('#open-portal');
+    await page.waitForSelector('.sheet-wrap.on', { timeout: 60000 });
+    assert((await page.textContent('.sheet-title')).includes('não detecta superfícies'), 'choice sheet');
+    await page.click('.sheet .pill:has-text("Tenho o marcador impresso")');
     await page.waitForFunction(() => window.__portal?.currentMode === 'marker', null, { timeout: 60000 });
     const live = await page.evaluate(() => {
       const v = document.querySelector('video.camera-feed');
@@ -198,7 +202,7 @@ console.log(`\nPORTAL e2e — serving dist at ${ORIGIN}${BASE}\n`);
     await page.waitForFunction(() => window.__portal.currentMode === 'manual', null, { timeout: 30000 });
     await page.waitForTimeout(400);
     assert((await page.textContent('.ins-title')).includes('Procure uma superfície plana para abrir seu portal.'), 'placement instruction');
-    assert((await page.textContent('.ins-text')).includes('não é detectada automaticamente'), 'manual mode must be honest about detection');
+    assert((await page.textContent('.ins-text')).includes('Sem detecção de superfícies'), 'manual mode must be honest about detection');
     await page.mouse.click(206, 600);
     await page.waitForFunction(() => window.__portal.phase !== 'hidden', null, { timeout: 30000 });
     await page.waitForFunction(() => window.__portal.phase === 'open', null, { timeout: 120000 });
@@ -316,7 +320,7 @@ console.log(`\nPORTAL e2e — serving dist at ${ORIGIN}${BASE}\n`);
   watchErrors(page, errors);
   await test('3b. WebXR reportado → texto de detecção de superfícies', async () => {
     await page.goto(URL_);
-    await page.waitForFunction(() => document.querySelector('.cap-text').textContent.includes('superfícies'));
+    await page.waitForFunction(() => document.querySelector('.cap-text').textContent.includes('com detecção de superfícies'));
   });
   await test('2b. falha do WebXR → fallback → câmera negada → orientação clara', async () => {
     await page.click('#open-portal');
@@ -356,16 +360,23 @@ console.log(`\nPORTAL e2e — serving dist at ${ORIGIN}${BASE}\n`);
   watchErrors(page, errors);
   await test('2c. WebXR: câmera pedida na página antes da sessão AR (evita bloqueio do Android)', async () => {
     await page.goto(URL_);
-    await page.waitForFunction(() => document.querySelector('.cap-text').textContent.includes('superfícies'));
+    await page.waitForFunction(() => document.querySelector('.cap-text').textContent.includes('com detecção de superfícies'));
     await page.click('#open-portal');
     await page.waitForSelector('.instruction.on .pill.primary', { timeout: 60000 });
     assert((await page.textContent('.ins-title')).includes('Câmera liberada'), 'camera-ready step');
     let calls = await page.evaluate(() => window.__calls);
     assert(calls.join() === 'getUserMedia', 'camera must be requested before any AR session: ' + calls);
     await page.click('.instruction .pill.primary');
-    await page.waitForFunction(() => window.__portal.currentMode === 'marker', null, { timeout: 60000 });
+    await page.waitForSelector('.sheet-wrap.on', { timeout: 60000 });
     calls = await page.evaluate(() => window.__calls);
     assert(calls[0] === 'getUserMedia' && calls.includes('requestSession'), 'order ' + calls);
+  });
+  await test('2d. AR falhou → explicação clara (sem trocar de modo sozinho) → escolha do usuário', async () => {
+    assert((await page.textContent('.sheet-title')).includes('não iniciou'), 'xr failure sheet');
+    assert((await page.evaluate(() => window.__portal.currentMode)) === null, 'must not silently switch to marker');
+    assert(!(await page.isVisible('.marker-only')), 'marker link hidden on WebXR devices');
+    await page.click('.sheet .pill:has-text("Explorar em 3D")');
+    await page.waitForFunction(() => window.__portal.currentMode === 'explore', null, { timeout: 60000 });
   });
   await test('sem erros de JavaScript (suite WebXR)', async () => {
     assert(errors.length === 0, errors.join(' | '));

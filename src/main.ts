@@ -94,7 +94,7 @@ openBtn.addEventListener('click', async () => {
     await exp.startXRFlow();
     return;
   }
-  if (c.camera) await exp.startCamera('marker', c.webxrAR);
+  if (c.camera) exp.chooseCameraMode();
   else await exp.startBest();
 });
 
@@ -113,6 +113,8 @@ exploreBtn.addEventListener('click', async () => {
   caps = await detectCapabilities();
   const d = describeCapabilities(caps);
   setCapability(d.text, d.tone);
+  // the printed marker only matters on devices without WebXR surface detection
+  if (caps.webxrAR) document.querySelectorAll<HTMLElement>('.marker-only').forEach((el) => (el.hidden = true));
   if (!caps.webgl) {
     openBtn.disabled = true;
     exploreBtn.disabled = true;
