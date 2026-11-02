@@ -67,6 +67,22 @@ const URL_ = `${ORIGIN}${BASE}?quality=economico&timescale=3`;
 
 // ---------------------------------------------------------------- harness
 const results = [];
+let currentPage = null; // page of the running suite, for failure diagnostics
+async function diagnose(name) {
+  if (!currentPage) return '';
+  try {
+    const file = path.join(out, 'fail-' + name.replace(/[^a-z0-9]+/gi, '-').slice(0, 40) + '.png');
+    await currentPage.screenshot({ path: file });
+    const st = await currentPage.evaluate(() => ({
+      lastTap: window.__portal?.lastTap,
+      overlays: [...document.querySelectorAll('#ui-root .on')].map((e) => e.className),
+      contextLost: window.__portal?.engine.renderer.getContext().isContextLost(),
+    }));
+    return ' | state ' + JSON.stringify(st);
+  } catch (e) {
+    return ' | (no diagnostics: ' + e.message + ')';
+  }
+}
 async function test(name, fn) {
   const t0 = Date.now();
   try {
@@ -74,8 +90,9 @@ async function test(name, fn) {
     results.push({ name, ok: true, ms: Date.now() - t0 });
     console.log(`  ✓ ${name} (${Date.now() - t0} ms)`);
   } catch (e) {
-    results.push({ name, ok: false, error: String(e?.message || e) });
-    console.log(`  ✗ ${name}\n      ${String(e?.message || e).split('\n')[0]}`);
+    const extra = await diagnose(name);
+    results.push({ name, ok: false, error: String(e?.message || e) + extra });
+    console.log(`  ✗ ${name}\n      ${String(e?.message || e).split('\n')[0]}${extra}`);
   }
 }
 const assert = (c, msg) => {
@@ -118,6 +135,7 @@ console.log(`\nPORTAL e2e — serving dist at ${ORIGIN}${BASE}\n`);
   const browser = await chromium.launch({ args: [...GL_ARGS, ...CAM_ARGS] });
   const ctx = await browser.newContext({ viewport: { width: 412, height: 860 }, permissions: ['camera'], hasTouch: false });
   const page = await ctx.newPage();
+  currentPage = page;
   const errors = [];
   watchErrors(page, errors);
 
@@ -233,6 +251,7 @@ console.log(`\nPORTAL e2e — serving dist at ${ORIGIN}${BASE}\n`);
 {
   const browser = await chromium.launch({ args: GL_ARGS });
   const page = await browser.newPage({ viewport: { width: 900, height: 700 } });
+  currentPage = page;
   const errors = [];
   watchErrors(page, errors);
   await test('explorar sem câmera (modo 3D)', async () => {
@@ -324,6 +343,7 @@ console.log(`\nPORTAL e2e — serving dist at ${ORIGIN}${BASE}\n`);
     };
   });
   const page = await ctx.newPage();
+  currentPage = page;
   const errors = [];
   watchErrors(page, errors);
   await test('3b. WebXR reportado → texto de detecção de superfícies', async () => {
@@ -364,6 +384,7 @@ console.log(`\nPORTAL e2e — serving dist at ${ORIGIN}${BASE}\n`);
     });
   });
   const page = await ctx.newPage();
+  currentPage = page;
   const errors = [];
   watchErrors(page, errors);
   await test('2c. WebXR: câmera pedida na página antes da sessão AR (evita bloqueio do Android)', async () => {
@@ -396,6 +417,7 @@ console.log(`\nPORTAL e2e — serving dist at ${ORIGIN}${BASE}\n`);
 {
   const browser = await chromium.launch({ args: GL_ARGS });
   const page = await browser.newPage({ viewport: { width: 900, height: 700 } });
+  currentPage = page;
   const errors = [];
   watchErrors(page, errors);
   const W = 'p.stage.world';
@@ -454,7 +476,7 @@ console.log(`\nPORTAL e2e — serving dist at ${ORIGIN}${BASE}\n`);
     assert(await page.evaluate(() => window.__portal.discoveries.has('vale-tesouro')), 'treasure discovery');
     await page.evaluate(() => { const p = window.__portal; p.engine.camera.position.set(0.0, 1.45, 0.4); p.explore.controls.target.set(-0.09, 1.1, -0.5); p.explore.controls.update(); });
     await page.waitForTimeout(300);
-    assert((await tapObject(page, `${W}.proxies.mine`)) === 'mine', 'mine');
+    { const hit = await tapObject(page, `${W}.proxies.mine`); assert(hit === 'mine', 'mine tap hit: ' + hit); }
     assert(await page.evaluate(() => window.__portal.discoveries.has('vale-mina')), 'mine discovery');
     await page.click('.dock-btn[aria-label="Descobertas"]');
     await page.waitForSelector('.panel-wrap.on');
@@ -464,7 +486,7 @@ console.log(`\nPORTAL e2e — serving dist at ${ORIGIN}${BASE}\n`);
   await test('vale: pesca no lago', async () => {
     await page.evaluate(() => { const p = window.__portal; p.engine.camera.position.set(-0.5, 1.7, 1.4); p.explore.controls.target.set(-0.45, 1.05, 0.6); p.explore.controls.update(); });
     await page.waitForTimeout(300);
-    assert((await tapObject(page, `${W}.proxies.pond`)) === 'pond', 'pond');
+    { const hit = await tapObject(page, `${W}.proxies.pond`); assert(hit === 'pond', 'pond tap hit: ' + hit); }
     await page.waitForFunction(() => /Fisgou|Dourado/.test(document.querySelector('.hint')?.textContent + document.querySelector('.card')?.textContent), null, { timeout: 30000 });
   });
   await test('troca de mundo sem recarregar (vale → ilha)', async () => {

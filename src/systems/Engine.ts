@@ -59,9 +59,11 @@ export class Engine {
 
     this.canvas.addEventListener('webglcontextlost', (e) => {
       e.preventDefault();
+      console.warn('[engine] webglcontextlost');
       this.onContextLost();
     });
     this.canvas.addEventListener('webglcontextrestored', () => {
+      console.warn('[engine] webglcontextrestored');
       this.onContextRestored();
     });
 
