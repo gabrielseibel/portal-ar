@@ -28,7 +28,9 @@ const params = new URLSearchParams(location.search);
 
 let caps: Capabilities | null = null;
 const urlWorld = params.get('world');
-let world: WorldKind = urlWorld === 'vila' || urlWorld === 'fantasia' ? urlWorld : Storage.get<WorldKind>('world', 'fantasia');
+const WORLDS: WorldKind[] = ['fantasia', 'vila', 'duda'];
+let world: WorldKind = WORLDS.includes(urlWorld as WorldKind) ? (urlWorld as WorldKind) : Storage.get<WorldKind>('world', 'fantasia');
+if (!WORLDS.includes(world)) world = 'fantasia';
 const worldButtons = [...document.querySelectorAll<HTMLButtonElement>('.world-opt')];
 function selectWorld(k: WorldKind) {
   world = k;

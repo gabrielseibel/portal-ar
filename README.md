@@ -11,6 +11,7 @@ Não há aplicativo para instalar, nem cadastro, servidor, banco de dados ou cha
 ## Sumário
 
 - [O que tem dentro](#o-que-tem-dentro)
+- [Três mundos](#três-mundos)
 - [Como a realidade aumentada funciona (três modos reais)](#como-a-realidade-aumentada-funciona-três-modos-reais)
 - [Tecnologias](#tecnologias)
 - [Como executar localmente](#como-executar-localmente)
@@ -41,9 +42,9 @@ Não há aplicativo para instalar, nem cadastro, servidor, banco de dados ou cha
 
 > Observação: o enunciado pedia um painel chamado “DESCUBRAS DO PORTAL”. Interpretei como erro de digitação e usei **“Descobertas do Portal”**.
 
-## Dois mundos
+## Três mundos
 
-Na tela inicial você escolhe o que sai do portal:
+Na tela inicial você escolhe o que sai do portal (são três mundos):
 
 - **Ilha Encantada**: a ilha de fantasia com dragão, castelo e cristais.
 - **Vale Alecrim**: uma fazenda e uma vila aconchegantes em estilo voxel, 100% originais:
@@ -53,6 +54,19 @@ Na tela inicial você escolhe o que sai do portal:
   - **Ciclo de dia e noite**: janelas e lampiões acendem e vaga-lumes aparecem à noite. O sino da torre adianta o tempo.
   - **Quatro estações**: toque na Árvore Anciã para mudar. Cada estação tem folhagem própria e pétalas, folhas ou neve caindo, e no inverno o chão fica coberto de neve.
   - **7 segredos próprios**: mina atrás da cachoeira, cogumelo gigante, galinha dourada, peixe lendário, tesouro enterrado, espírito noturno e uma carta misteriosa.
+
+### Fazenda da Duda (feita com os seus modelos 3D)
+
+O terceiro mundo usa os modelos do projeto próprio de imagens e 3D: a **fazenda em voxel** (`My_Stardew_Valley_Farm.fbx`) e a **casa da fazenda texturizada** (`Stardew_Valley_Farmhouse.fbx`), com as imagens de referência como guia de cores.
+
+- **A fazenda**: o FBX foi revoxelizado (126 × 115 × 26) e recolorido em tons vivos: grama, trilhas de terra, canteiros arados, estufa de vidro translúcido, celeiro vermelho, galinheiro, colmeias, pomar com macieiras, laranjeiras, cerejeiras e árvores douradas, lago e campina florida. Tudo vira 60 KB de dados (`public/models/fazenda-da-duda/fazenda.bin`) e a malha é montada no navegador.
+- **Casa da Duda**: o modelo da casa com as texturas pintadas originais (`casa.glb`, 250 KB, texturas em WebP), com fumaça saindo da própria chaminé do modelo.
+- **A ilha**: a fazenda flutua sobre um bloco de terra e pedra com raízes e flores penduradas, cercada por ilhotas que balançam.
+- **Vida**: a Duda faz a rotina dela (rega as plantações, olha o lago, acena para as galinhas), árvores balançam ao vento, galinhas ciscam, patos nadam, abelhas rondam as colmeias, borboletas de dia, vaga-lumes e lampiões à noite, ciclo de dia e noite.
+- **Interações**: toque na Duda (ela conversa), nas **5 plantações** para colher (elas crescem de novo), nas árvores (balançam e soltam frutas, pétalas ou folhas), na casa (descansar e adiantar o dia), no celeiro, no galpão, no espantalho e no lago para pescar.
+- **7 segredos**: Biscoito (o cachorro dorme perto da estufa e, acordado, segue a Duda), Ovo Dourado, Mel Encantado, Carpa Arco-íris, Trevo da Sorte, Flor da Lua (só à noite, dentro da estufa) e Colheita Completa.
+
+Para regenerar os dados a partir dos FBX (Blender 4.x/5.x e Python 3 com numpy), veja [`tools/fazenda-da-duda/`](tools/fazenda-da-duda/README.md).
 
 ## Como a realidade aumentada funciona (três modos reais)
 
@@ -105,6 +119,7 @@ Parâmetros de URL úteis:
 | `?mode=marker` / `?mode=manual` | Força o modo de câmera ao tocar em *ABRIR MEU PORTAL* |
 | `?xr=off` | Ignora o WebXR (útil para testar o modo marcador num Android com ARCore) |
 | `?autostart=explore` | Entra direto no modo 3D |
+| `?world=fantasia\|vila\|duda` | Escolhe o mundo |
 | `?timescale=3` | Acelera o relógio do mundo (usado nos testes automatizados) |
 
 ## Como publicar no GitHub Pages
@@ -256,4 +271,5 @@ Eles são carregados depois que o mundo aparece. Arquivo ausente, GLB inválido 
 - [three.js](https://threejs.org) (MIT)
 - [js-aruco2](https://github.com/damianofalcioni/js-aruco2) (MIT): Damiano Falcioni e Juan Mellado
 - Fontes [Cinzel](https://fonts.google.com/specimen/Cinzel), [Cormorant Garamond](https://fonts.google.com/specimen/Cormorant+Garamond) e [Manrope](https://fonts.google.com/specimen/Manrope) (SIL Open Font License) via @fontsource
+- Fazenda da Duda: modelos da fazenda e da casa e imagens de referência fornecidos pelo autor do projeto (projeto próprio de imagens e 3D).
 - Todo o resto (mundo, personagens, shaders, sons) foi criado de forma procedural para este projeto.

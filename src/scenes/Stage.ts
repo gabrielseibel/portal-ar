@@ -3,6 +3,7 @@ import type { QualitySettings } from '../systems/Quality';
 import { Portal } from '../effects/Portal';
 import { World } from '../world/World';
 import { FarmWorld } from '../world/farm/FarmWorld';
+import { DudaWorld } from '../world/duda/DudaWorld';
 import { Dragon, DRAGON_TEAL } from '../characters/Dragon';
 import { Birds } from '../characters/Birds';
 import { Sky } from '../world/Sky';
@@ -16,7 +17,7 @@ import { glowTexture } from '../utils/textures';
 
 export type StagePhase = 'hidden' | 'opening' | 'open';
 export type Environment = 'ar' | 'explore';
-export type WorldKind = 'fantasia' | 'vila';
+export type WorldKind = 'fantasia' | 'vila' | 'duda';
 
 const RISE_START = 1.9;
 const RISE_DUR = 2.6;
@@ -33,7 +34,7 @@ export class Stage {
   readonly anchor = new THREE.Group();
   readonly root = new THREE.Group();
   readonly portal: Portal;
-  readonly world: World | FarmWorld;
+  readonly world: World | FarmWorld | DudaWorld;
   readonly kind: WorldKind;
   readonly hasDragon: boolean;
   readonly dragon: Dragon;
@@ -98,7 +99,7 @@ export class Stage {
     this.portal = new Portal(q.particles);
     this.root.add(this.portal.group);
 
-    this.world = kind === 'vila' ? new FarmWorld(q) : new World(q, this.fire, this.root);
+    this.world = kind === 'vila' ? new FarmWorld(q) : kind === 'duda' ? new DudaWorld(q) : new World(q, this.fire, this.root);
     this.world.group.position.y = ISLAND_Y;
     this.root.add(this.world.group);
 
@@ -125,7 +126,12 @@ export class Stage {
 
     // island + dragon rise *through* the portal: clip everything below the surface
     const clip = [this.clipPlane];
-    for (const m of [...this.world.materials(), ...materialsOf(this.dragon.root)]) m.clippingPlanes = clip;
+    const applyClip = () => {
+      for (const m of [...this.world.materials(), ...materialsOf(this.dragon.root)]) m.clippingPlanes = clip;
+    };
+    applyClip();
+    // the Fazenda da Duda loads its models asynchronously
+    if (this.world instanceof DudaWorld) void this.world.ready.then(applyClip);
 
     this.hideAll();
     this.applyTransform();
@@ -341,7 +347,7 @@ export class Stage {
     // slow, subtle drift of the sun: dynamic light across the diorama
     const a = t * 0.03;
     this.sun.position.set(Math.cos(a) * 2.6 + 0.6, 4.2 + Math.sin(a * 1.7) * 0.3, Math.sin(a) * 2.2 + 1.6);
-    if (this.world instanceof FarmWorld) this.world.applyLighting(this.sun, this.hemi);
+    if (!(this.world instanceof World)) this.world.applyLighting(this.sun, this.hemi);
   }
 
   private runSequence(dt: number) {
