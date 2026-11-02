@@ -25,6 +25,10 @@ export class InteractionSystem {
   private invProj = new THREE.Matrix4();
   enabled = true;
 
+  clear() {
+    this.targets = [];
+  }
+
   add(t: Tappable) {
     this.targets.push(t);
     return t;

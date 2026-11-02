@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { QualitySettings } from '../systems/Quality';
 import { Portal } from '../effects/Portal';
 import { World } from '../world/World';
+import { FarmWorld } from '../world/farm/FarmWorld';
 import { Dragon, DRAGON_TEAL } from '../characters/Dragon';
 import { Birds } from '../characters/Birds';
 import { Sky } from '../world/Sky';
@@ -15,6 +16,7 @@ import { glowTexture } from '../utils/textures';
 
 export type StagePhase = 'hidden' | 'opening' | 'open';
 export type Environment = 'ar' | 'explore';
+export type WorldKind = 'fantasia' | 'vila';
 
 const RISE_START = 1.9;
 const RISE_DUR = 2.6;
@@ -31,7 +33,9 @@ export class Stage {
   readonly anchor = new THREE.Group();
   readonly root = new THREE.Group();
   readonly portal: Portal;
-  readonly world: World;
+  readonly world: World | FarmWorld;
+  readonly kind: WorldKind;
+  readonly hasDragon: boolean;
   readonly dragon: Dragon;
   readonly birds: Birds;
   readonly sky: Sky;
@@ -65,8 +69,10 @@ export class Stage {
   onRevealed: () => void = () => {};
   onDragonLanded: () => void = () => {};
 
-  constructor(scene: THREE.Scene, q: QualitySettings) {
+  constructor(scene: THREE.Scene, q: QualitySettings, kind: WorldKind = 'fantasia') {
     this.quality = q;
+    this.kind = kind;
+    this.hasDragon = kind === 'fantasia';
     this.anchor.name = 'anchor';
     this.root.name = 'stage';
     this.anchor.add(this.root);
@@ -92,7 +98,7 @@ export class Stage {
     this.portal = new Portal(q.particles);
     this.root.add(this.portal.group);
 
-    this.world = new World(q, this.fire, this.root);
+    this.world = kind === 'vila' ? new FarmWorld(q) : new World(q, this.fire, this.root);
     this.world.group.position.y = ISLAND_Y;
     this.root.add(this.world.group);
 
@@ -103,8 +109,7 @@ export class Stage {
     // dragon + perch rock on the real surface next to the ring
     this.dragon = new Dragon(DRAGON_TEAL, this.fire, this.root);
     this.dragon.root.scale.setScalar(0.2);
-    const perch = this.buildPerch();
-    this.root.add(perch, this.dragon.root);
+    if (this.hasDragon) this.root.add(this.buildPerch(), this.dragon.root);
     const perchTop = new THREE.Vector3(PERCH.x, 0.085, PERCH.z);
     this.dragon.setHome(perchTop, Math.atan2(-PERCH.x * 0.4, 1));
 
@@ -216,6 +221,18 @@ export class Stage {
     }
   }
 
+  /** Frees GPU memory when switching worlds. */
+  dispose(scene: THREE.Scene) {
+    scene.remove(this.anchor);
+    this.anchor.traverse((o) => {
+      const m = o as THREE.Mesh;
+      m.geometry?.dispose();
+      const mats = m.material ? (Array.isArray(m.material) ? m.material : [m.material]) : [];
+      mats.forEach((x) => x.dispose());
+    });
+    this.sun.shadow.map?.dispose();
+  }
+
   setQuality(q: QualitySettings) {
     this.quality = q;
     this.sun.castShadow = q.shadows;
@@ -254,7 +271,7 @@ export class Stage {
     this.clipActive = true;
     this.portal.reset();
     this.hideAll();
-    this.world.spirit.reset();
+    this.world.reset();
   }
 
   /** Instantly show the opened state (no animation). */
@@ -270,7 +287,7 @@ export class Stage {
     this.sky.group.visible = this.birds.group.visible = true;
     this.sky.group.scale.setScalar(1);
     this.birds.group.scale.setScalar(1);
-    this.dragon.showAtHome();
+    if (this.hasDragon) this.dragon.showAtHome();
     this.clipActive = false;
     this.seqRunning = false;
     this.flashed = this.dragonOut = this.revealed = true;
@@ -324,6 +341,7 @@ export class Stage {
     // slow, subtle drift of the sun: dynamic light across the diorama
     const a = t * 0.03;
     this.sun.position.set(Math.cos(a) * 2.6 + 0.6, 4.2 + Math.sin(a * 1.7) * 0.3, Math.sin(a) * 2.2 + 1.6);
+    if (this.world instanceof FarmWorld) this.world.applyLighting(this.sun, this.hemi);
   }
 
   private runSequence(dt: number) {
@@ -361,7 +379,7 @@ export class Stage {
         this.bursts.emit({ x: Math.cos(a) * PORTAL_R, y: 0.03, z: Math.sin(a) * PORTAL_R }, { x: Math.cos(a) * 0.3, y: 0.6 + Math.random() * 0.6, z: Math.sin(a) * 0.3 }, { life: 1.3, size: 0.045, color: '#ffe3a1', colorEnd: '#4ff0d2', drag: 1.8 });
       }
     }
-    if (!this.dragonOut && T >= DRAGON_AT) {
+    if (!this.dragonOut && T >= DRAGON_AT && this.hasDragon) {
       this.dragonOut = true;
       this.dragon.emerge(new THREE.Vector3(0.25, -0.3, 0.2), () => this.onDragonLanded());
     }

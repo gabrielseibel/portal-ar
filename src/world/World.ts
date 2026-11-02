@@ -161,6 +161,10 @@ export class World {
     return [...out];
   }
 
+  reset() {
+    this.spirit.reset();
+  }
+
   setDetailDistance(d: number) {
     if (this.detailLOD.levels[1]) this.detailLOD.levels[1].distance = d;
   }

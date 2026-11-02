@@ -41,6 +41,19 @@ Não há aplicativo para instalar, nem cadastro, servidor, banco de dados ou cha
 
 > Observação: o enunciado pedia um painel chamado “DESCUBRAS DO PORTAL”. Interpretei como erro de digitação e usei **“Descobertas do Portal”**.
 
+## Dois mundos
+
+Na tela inicial você escolhe o que sai do portal:
+
+- **Ilha Encantada**: a ilha de fantasia com dragão, castelo e cristais.
+- **Vale Alecrim**: uma fazenda e uma vila aconchegantes em estilo voxel, 100% originais:
+  - **Fazenda**: casa, horta com plantações que crescem (toque para colher), celeiro, galinheiro, vacas, gato na varanda, lago com píer de pesca e caixa de correio.
+  - **Vila**: praça com chafariz, torre do relógio (os ponteiros seguem a hora do dia), padaria, taverna, armazém, forja, biblioteca e quadro de avisos.
+  - **Moradores com rotina e falas**: Lia, Celeste, Dalva, Seu Olavo, Bento, Iara, Nina e Téo.
+  - **Ciclo de dia e noite**: janelas e lampiões acendem e vaga-lumes aparecem à noite. O sino da torre adianta o tempo.
+  - **Quatro estações**: toque na Árvore Anciã para mudar. Cada estação tem folhagem própria e pétalas, folhas ou neve caindo, e no inverno o chão fica coberto de neve.
+  - **7 segredos próprios**: mina atrás da cachoeira, cogumelo gigante, galinha dourada, peixe lendário, tesouro enterrado, espírito noturno e uma carta misteriosa.
+
 ## Como a realidade aumentada funciona (três modos reais)
 
 Ao tocar em **ABRIR MEU PORTAL**, o PORTAL verifica o que o aparelho realmente suporta e escolhe sozinho o melhor modo disponível. Nenhum modo finge um recurso que não existe.

@@ -326,8 +326,50 @@ body.in-experience #input-layer {
   text-shadow: 0 2px 18px rgba(0, 0, 0, 0.6);
   animation: rise 1.6s 0.9s both cubic-bezier(0.2, 0.7, 0.1, 1);
 }
+.world-pick {
+  margin-top: clamp(16px, 3vh, 28px);
+  display: flex;
+  gap: 8px;
+  animation: rise 1.6s 1.05s both cubic-bezier(0.2, 0.7, 0.1, 1);
+}
+.world-opt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 142px;
+  padding: 10px 14px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: rgba(14, 11, 26, 0.45);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  color: var(--muted);
+  transition: border-color 0.25s ease, background 0.25s ease, color 0.25s ease, transform 0.2s ease;
+}
+.world-opt:active {
+  transform: scale(0.97);
+}
+.world-opt.on {
+  color: var(--text);
+  border-color: rgba(233, 201, 138, 0.6);
+  background: rgba(233, 201, 138, 0.1);
+  box-shadow: 0 0 24px -8px rgba(233, 201, 138, 0.6);
+}
+.wo-name {
+  font-family: var(--display);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+}
+.world-opt.on .wo-name {
+  color: var(--gold);
+}
+.wo-sub {
+  font-size: 10.5px;
+  color: var(--faint);
+}
 .cta-group {
-  margin-top: clamp(26px, 6vh, 64px);
+  margin-top: clamp(18px, 4vh, 44px);
   display: flex;
   flex-direction: column;
   align-items: center;

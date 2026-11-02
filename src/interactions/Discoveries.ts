@@ -1,6 +1,6 @@
 import { Storage } from '../systems/Storage';
 
-export type DiscoveryId = 'cristal-cachoeira' | 'dragaozinho' | 'passagem-castelo' | 'bau' | 'espirito' | 'passaro-dourado' | 'coro-cogumelos';
+export type DiscoveryId = string;
 
 export interface DiscoveryDef {
   id: DiscoveryId;
@@ -20,9 +20,15 @@ export const DISCOVERIES: readonly DiscoveryDef[] = [
   { id: 'coro-cogumelos', name: 'Coro dos Cogumelos', icon: 'mushroom', hint: 'Perto do rio, quatro cogumelos coloridos parecem esperar uma deixa.', text: 'Os cogumelos cantam quando alguém finalmente presta atenção.' },
 ];
 
-/** Session collection of secrets, optionally persisted in localStorage (no server). */
+/** Session collection of secrets, optionally persisted in localStorage (no server). One collection per world. */
 export class Discoveries {
-  private found = new Set<DiscoveryId>(Storage.get<DiscoveryId[]>('discoveries', []).filter((id) => DISCOVERIES.some((d) => d.id === id)));
+  private found: Set<DiscoveryId>;
+  constructor(
+    readonly defs: readonly DiscoveryDef[] = DISCOVERIES,
+    private key = 'discoveries',
+  ) {
+    this.found = new Set(Storage.get<DiscoveryId[]>(key, []).filter((id) => defs.some((d) => d.id === id)));
+  }
   onFound: (d: DiscoveryDef, count: number) => void = () => {};
   onChange: () => void = () => {};
 
@@ -35,15 +41,15 @@ export class Discoveries {
   }
 
   get total() {
-    return DISCOVERIES.length;
+    return this.defs.length;
   }
 
   /** Returns true when this is a new discovery. */
   find(id: DiscoveryId) {
     if (this.found.has(id)) return false;
     this.found.add(id);
-    Storage.set('discoveries', [...this.found]);
-    const def = DISCOVERIES.find((d) => d.id === id)!;
+    Storage.set(this.key, [...this.found]);
+    const def = this.defs.find((d) => d.id === id)!;
     this.onFound(def, this.found.size);
     this.onChange();
     return true;
@@ -51,7 +57,7 @@ export class Discoveries {
 
   reset() {
     this.found.clear();
-    Storage.remove('discoveries');
+    Storage.remove(this.key);
     this.onChange();
   }
 }
