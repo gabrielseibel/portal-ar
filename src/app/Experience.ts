@@ -9,7 +9,7 @@ import { Gestures } from '../interactions/Gestures';
 import { Discoveries, DISCOVERIES, type DiscoveryId } from '../interactions/Discoveries';
 import type { AudioEngine } from '../audio/AudioEngine';
 import type { ARMode, ModeKind, PlacementStatus } from '../ar/ARMode';
-import { CameraFeed, CameraError } from '../ar/CameraFeed';
+import { CameraFeed, CameraError, preauthorizeCamera } from '../ar/CameraFeed';
 import { MarkerMode } from '../ar/MarkerMode';
 import { ManualMode } from '../ar/ManualMode';
 import { ExploreMode } from '../ar/ExploreMode';
@@ -248,6 +248,43 @@ export class Experience {
   }
 
   // ------------------------------------------------------------------ entry points
+  /**
+   * WebXR entry that works around Android Chrome's overlay protection:
+   * 1) ask for the camera in the normal page (a regular prompt, like any site);
+   * 2) a second tap (fresh user activation) opens the AR session, which no
+   *    longer needs to prompt. Falls back to the marker mode if AR fails.
+   */
+  async startXRFlow() {
+    this.prepare('Pedindo acesso à câmera…');
+    try {
+      await preauthorizeCamera();
+    } catch (e) {
+      this.overlay.loading(false);
+      this.cameraFailed(e as CameraError);
+      return;
+    }
+    this.overlay.loading(false);
+    this.overlay.setMode('AR · superfícies');
+    this.overlay.showChrome(true);
+    this.overlay.instruction({
+      title: 'Câmera liberada',
+      text: 'Toque abaixo para entrar na realidade aumentada. Depois, procure uma superfície plana para abrir seu portal.',
+      visual: 'scan',
+      actions: [
+        {
+          label: 'Entrar na realidade aumentada',
+          primary: true,
+          onClick: async () => {
+            this.overlay.instruction(null);
+            this.audio.unlock();
+            if (!(await this.startXR())) await this.startCamera('marker', true);
+          },
+        },
+        { label: 'Usar marcador', onClick: () => void this.startCamera('marker') },
+      ],
+    });
+  }
+
   /** Try WebXR immersive-ar with hit-test. Resolves false if unavailable/denied. */
   async startXR(): Promise<boolean> {
     this.prepare('Realidade aumentada');
@@ -346,7 +383,7 @@ export class Experience {
   private cameraFailed(e: CameraError) {
     const kind = e instanceof CameraError ? e.kind : 'unknown';
     const texts: Record<string, [string, string]> = {
-      denied: ['Precisamos da sua câmera', 'O acesso à câmera foi negado. Para abrir o portal no seu ambiente, permita a câmera nas configurações do navegador (ícone de cadeado na barra de endereço) e tente novamente.'],
+      denied: ['Precisamos da sua câmera', 'O acesso à câmera foi negado. Para liberar: toque no ícone à esquerda do endereço → Permissões → Câmera → Permitir (ou ⋮ → Configurações → Configurações do site → Câmera). Depois, toque em Tentar novamente.'],
       notfound: ['Nenhuma câmera encontrada', 'Não encontramos uma câmera disponível neste dispositivo. Você ainda pode explorar o mundo em 3D.'],
       busy: ['A câmera está ocupada', 'Outro aplicativo está usando a câmera. Feche-o e tente novamente.'],
       insecure: ['Conexão não segura', 'A câmera só funciona em páginas HTTPS. Abra o PORTAL pelo endereço https:// do GitHub Pages.'],
@@ -355,7 +392,7 @@ export class Experience {
     const [title, text] = texts[kind] ?? texts.unknown;
     this.overlay.sheet(title, text, [
       { label: 'Explorar sem câmera', onClick: () => (this.overlay.closeSheet(), void this.startExplore()) },
-      { label: 'Tentar novamente', primary: true, onClick: () => (this.overlay.closeSheet(), void this.startCamera()) },
+      { label: 'Tentar novamente', primary: true, onClick: () => (this.overlay.closeSheet(), void this.startBest()) },
       { label: 'Voltar', onClick: () => (this.overlay.closeSheet(), this.exit()) },
     ]);
   }
@@ -726,7 +763,7 @@ export class Experience {
   /** Called by main when the user wants to retry the best camera path. */
   async startBest() {
     const caps = await detectCapabilities();
-    if (caps.webxrAR && (await this.startXR())) return;
+    if (caps.webxrAR) return this.startXRFlow();
     if (caps.camera) await this.startCamera(this.preferredCameraMode, caps.webxrAR);
     else this.cameraFailed(new CameraError(caps.secure ? 'notfound' : 'insecure', ''));
   }

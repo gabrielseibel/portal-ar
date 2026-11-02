@@ -90,7 +90,10 @@ openBtn.addEventListener('click', async () => {
     await exp.startCamera(forced);
     return;
   }
-  if (c.webxrAR && (await exp.startXR())) return;
+  if (c.webxrAR) {
+    await exp.startXRFlow();
+    return;
+  }
   if (c.camera) await exp.startCamera('marker', c.webxrAR);
   else await exp.startBest();
 });
