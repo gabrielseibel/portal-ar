@@ -75,8 +75,8 @@ Ao tocar em **ABRIR MEU PORTAL**, o PORTAL verifica o que o aparelho realmente s
 | Modo | Quando é usado | O que faz de verdade |
 |---|---|---|
 | **1. WebXR (superfícies)** | `navigator.xr.isSessionSupported('immersive-ar')` retorna `true` (Chrome para Android com ARCore, por exemplo). | Sessão `immersive-ar` com **hit-test**. Um retículo aparece sobre superfícies **detectadas**; um toque abre o portal ali. Usa *DOM Overlay* para a interface e *XR Anchors* quando disponíveis, para o mundo ficar preso à mesa. |
-| **2. Marcador impresso** | Sem WebXR, mas com câmera (iPhone/Safari, navegadores Android sem ARCore, desktop). | Rastreamento de imagem real: o marcador [ArUco MIP 36h12 nº 7](public/marcador.html) é detectado em cada quadro da câmera (`js-aruco2`) e a pose 6DoF é estimada com POSIT. O mundo fica ancorado sobre o marcador, com suavização de tremores. Se o marcador sai de vista, o mundo permanece onde estava, com um aviso. |
-| **3. Posicionamento manual** | Escolhido pelo usuário (“Sem marcador”), também sem WebXR. | A câmera aparece ao fundo e o portal é colocado num **plano assumido** (a interface avisa que a superfície *não* é detectada). Com giroscópio, a câmera virtual acompanha a rotação do celular (3DoF); no iOS há um botão “Ativar giroscópio”, porque o Safari exige permissão. Sem giroscópio, você arrasta o anel até a mesa. |
+| **2. Câmera + giroscópio** (padrão sem WebXR) | Sem WebXR, mas com câmera (iPhone/Safari, navegadores Android sem ARCore, desktop). A câmera abre direto, sem escolhas nem marcador. | A câmera aparece ao fundo e o portal é colocado num **plano assumido** (o chão, a ~1 m do celular; a interface avisa que a superfície *não* é detectada). O giroscópio faz a câmera virtual acompanhar a rotação do celular (3DoF); no iPhone a permissão de movimento é pedida no mesmo toque de *ABRIR MEU PORTAL*. Sem giroscópio, você arrasta o anel. Se algo der errado, o PORTAL sugere a **exploração em 3D**. |
+| **Marcador impresso** (opcional, `?mode=marker`) | Só por parâmetro de URL. | Rastreamento de imagem real: o marcador [ArUco MIP 36h12 nº 7](public/marcador.html) é detectado em cada quadro da câmera (`js-aruco2`) e a pose 6DoF é estimada com POSIT. O mundo fica ancorado sobre o marcador, com suavização de tremores. Se o marcador sai de vista, o mundo permanece onde estava, com um aviso. |
 | **Exploração 3D** | Botão **Explorar sem câmera**, ou quando a câmera não está disponível ou foi negada. | O mesmo mundo, sobre um altar de pedra num céu estrelado, com órbita, zoom e rotação automática. |
 
 **Por que não MindAR?** O MindAR exige compilar o alvo (`.mind`) e carrega TensorFlow.js (~1 MB+). O marcador ArUco é **leve** (~13 KB gzip), **robusto** (36 bits, distância de Hamming 12, praticamente sem falsos positivos), fácil de imprimir e gerado de forma reproduzível pelo próprio repositório (`scripts/generate-marker.mjs`).
@@ -141,12 +141,12 @@ Detalhes que tornam isso robusto:
 
 1. Abra o link no celular e toque em **ABRIR MEU PORTAL**. Permita o uso da câmera.
 2. **Android com WebXR:** mova o celular devagar, apontando para uma mesa ou para o chão. Quando o anel aparecer sobre a superfície, toque na tela.
-3. **iPhone e outros:** imprima o [marcador](public/marcador.html) (o link *Marcador para imprimir* fica no rodapé da tela inicial), coloque-o sobre a mesa e aponte a câmera. O portal abre sozinho. Sem impressora, abra o marcador na tela de outro aparelho, ou toque em **Sem marcador** para usar o posicionamento manual.
+3. **iPhone e outros:** a câmera abre direto. Permita o acesso ao movimento (giroscópio), aponte para o chão e toque em **Abrir portal aqui**. Se a câmera ou o giroscópio não funcionarem, toque em **Explorar em 3D**.
 4. Assista à abertura do portal, toque no dragão, na vila, no castelo e nos cristais.
 5. Procure os 7 segredos. O ícone de estrela mostra quantos você encontrou.
 6. Controles:
    - **Arraste** com um dedo para girar o mundo; **pince** com dois dedos para mudar o tamanho; **gire** com dois dedos para rotacionar.
-   - **Escala**: controle deslizante e botões − / +.
+   - **Escala**: *Tamanho do mundo* (até 6×) e *Altura da ilha* (subir/abaixar a ilha sobre o portal), com controles deslizantes e botões.
    - **Reposicionar**: escolhe outro lugar para o portal.
    - **Explorar**: girar, aproximar/afastar, órbita automática e **Reiniciar** (repete a abertura).
    - **Som**: liga/desliga (a preferência fica salva). **X**: sai do modo AR e volta à tela inicial.
@@ -156,16 +156,16 @@ Detalhes que tornam isso robusto:
 | Plataforma | Modo usado | Situação |
 |---|---|---|
 | Android + Chrome (ARCore / Google Play Services for AR) | WebXR com detecção de superfícies | ✅ melhor experiência |
-| Android sem ARCore, Firefox, Samsung Internet sem WebXR | Marcador ou manual | ✅ |
-| iPhone/iPad (Safari, Chrome iOS) | Marcador ou manual (giroscópio com permissão) | ✅ (o Safari não oferece WebXR AR) |
-| Desktop (Chrome, Edge, Firefox, Safari) | Marcador com webcam, ou exploração 3D | ✅ |
+| Android sem ARCore, Firefox, Samsung Internet sem WebXR | Câmera + giroscópio | ✅ |
+| iPhone/iPad (Safari, Chrome iOS) | Câmera + giroscópio (com permissão) | ✅ (o Safari não oferece WebXR AR) |
+| Desktop (Chrome, Edge, Firefox, Safari) | Webcam (arrastar o anel) ou exploração 3D | ✅ |
 | Navegadores sem WebGL | Mensagem explicativa na tela inicial | ⚠️ |
 
 Requisitos: HTTPS, WebGL 1 ou 2, ES2020.
 
 ## Limitações conhecidas
 
-- **WebXR no iOS**: o Safari não oferece `immersive-ar`, por isso iPhones usam o marcador ou o modo manual. O PORTAL não usa *Quick Look*/USDZ, porque o mundo é interativo e procedural.
+- **WebXR no iOS**: o Safari não oferece `immersive-ar`, por isso iPhones usam a câmera com giroscópio (3DoF: o mundo acompanha a rotação, não os passos). O PORTAL não usa *Quick Look*/USDZ, porque o mundo é interativo e procedural.
 - **Escala real no modo marcador**: o campo de visão da câmera não é exposto pelos navegadores, então assumimos ~64° no lado maior do sensor. O alinhamento visual fica correto; a distância *absoluta* pode variar alguns centímetros entre aparelhos.
 - **Modo manual** não detecta a superfície: ela é assumida (a interface avisa). Sem giroscópio, o mundo fica fixo na tela.
 - **Iluminação**: fixa e estilizada (não usa *light estimation*), para manter a identidade visual.

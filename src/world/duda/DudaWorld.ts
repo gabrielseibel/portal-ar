@@ -185,7 +185,7 @@ export class DudaWorld {
 
     // touch targets (independent of the async model: interactions can bind right away)
     const H = (z: number) => z * S;
-    this.proxy('house', new THREE.Vector3(vx(HOUSE.x), 0.1, vz(HOUSE.y)), 0, 0, [HOUSE.width * S, 0.22, HOUSE.width * S * 0.86]);
+    this.proxy('house', new THREE.Vector3(vx(HOUSE.x), 0.1, vz(HOUSE.y)), 0, 0, [HOUSE.width * S, 0.22, HOUSE.depth * S]);
     this.proxy('greenhouse', at(GREENHOUSE, 2 + 10), 0, 0, rectSize(GREENHOUSE, H(20)));
     this.proxy('barn', at(BARN, 2 + 8), 0, 0, rectSize(BARN, H(16)));
     this.proxy('coop', at(COOP, 2 + 7), 0, 0, rectSize(COOP, H(14)));
@@ -255,7 +255,7 @@ export class DudaWorld {
 
   private placeFarmhouse(house: THREE.Object3D) {
     house.name = 'casa-da-duda';
-    house.scale.setScalar(HOUSE.width * S);
+    house.scale.setScalar(HOUSE.depth * S);
     house.position.set(vx(HOUSE.x), 0, vz(HOUSE.y));
     const clip = this.voxMat.clippingPlanes;
     let chimney: THREE.Mesh | null = null;
@@ -395,7 +395,7 @@ export class DudaWorld {
     const v = new Vox(b);
     const tex = glowTexture();
     for (const [x, y] of [
-      [26, 45],
+      [36.5, 45],
       [48, 34.5],
       [68, 34.5],
       [88, 35.5],

@@ -14,6 +14,7 @@ import { loadQualityPreference, resolveQuality, saveQualityPreference, type Qual
 import { Haptics } from './systems/Haptics';
 import { idle } from './utils/dom';
 import { Storage } from './systems/Storage';
+import { requestGyroPermission } from './ar/gyro';
 import type { WorldKind } from './scenes/Stage';
 import type { Experience } from './app/Experience';
 
@@ -94,6 +95,7 @@ openBtn.addEventListener('click', async () => {
   if (busy) return;
   busy = true;
   audio.unlock(); // inside the gesture
+  void requestGyroPermission(); // iOS only grants motion sensors from inside the tap
   Haptics.tap();
   const c = caps ?? (await detectCapabilities());
   if (!c.webgl) {
@@ -113,8 +115,8 @@ openBtn.addEventListener('click', async () => {
     await exp.startXRFlow();
     return;
   }
-  if (c.camera) exp.chooseCameraMode();
-  else await exp.startBest();
+  // no surface detection: straight to the camera + gyroscope (3D is offered if that fails)
+  await exp.startBest();
 });
 
 exploreBtn.addEventListener('click', async () => {

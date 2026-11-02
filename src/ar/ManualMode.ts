@@ -5,9 +5,10 @@ import type { Stage } from '../scenes/Stage';
 import { CameraFeed } from './CameraFeed';
 import { Reticle } from '../effects/Reticle';
 import { shared } from '../systems/SharedUniforms';
+import { gyroPermissionAsked, requestGyroPermission } from './gyro';
 
-/** Assumed distance from the phone to the table (metres) when no tracking exists. */
-const FLOOR_H = 0.42;
+/** Assumed distance from the phone to the surface (metres) when no tracking exists: aiming at the floor. */
+const FLOOR_H = 0.95;
 const STATIC_PITCH = -0.62;
 
 /**
@@ -20,7 +21,7 @@ const STATIC_PITCH = -0.62;
 export class ManualMode implements ARMode {
   readonly kind = 'manual' as const;
   readonly label = 'Posicionamento manual';
-  readonly baseScale = 0.16;
+  readonly baseScale = 0.32;
   placing = true;
   onStatus: (s: PlacementStatus) => void = () => {};
   onPlaced: () => void = () => {};
@@ -62,19 +63,20 @@ export class ManualMode implements ARMode {
     cam.quaternion.setFromEuler(new THREE.Euler(STATIC_PITCH, 0, 0, 'YXZ'));
     this.placing = true;
     this.setStatus('surface');
-    // Android exposes orientation without a prompt; iOS needs enableGyroscope() from a tap
+    // Android exposes orientation without a prompt; iOS was asked from the tap that opened
+    // the portal (if that did not happen, the "Ativar giroscópio" button asks again)
     const DOE = window.DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<string> } | undefined;
-    if (DOE && typeof DOE.requestPermission !== 'function') this.listenGyro();
+    const asked = gyroPermissionAsked();
+    if (asked) {
+      if (await asked) this.listenGyro();
+    } else if (DOE && typeof DOE.requestPermission !== 'function') this.listenGyro();
   }
 
   /** Must be called from a user gesture on iOS. */
   async enableGyroscope(): Promise<boolean> {
     const DOE = window.DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<string> } | undefined;
     try {
-      if (DOE?.requestPermission) {
-        const r = await DOE.requestPermission();
-        if (r !== 'granted') return false;
-      }
+      if (DOE?.requestPermission && !(await requestGyroPermission())) return false;
       this.listenGyro();
       return true;
     } catch {
