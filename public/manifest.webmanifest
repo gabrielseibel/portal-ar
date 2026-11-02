@@ -1,0 +1,12 @@
+{
+  "name": "PORTAL",
+  "short_name": "PORTAL",
+  "description": "Existe outro mundo logo abaixo da sua realidade.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#07060d",
+  "theme_color": "#07060d",
+  "icons": [{ "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Marcador PORTAL — para imprimir</title>
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <style>
+      @page { size: A4; margin: 14mm; }
+      :root { color-scheme: light; }
+      body { margin: 0; font-family: Georgia, 'Times New Roman', serif; color: #1d1626; background: #f6f1e7; }
+      main { max-width: 720px; margin: 0 auto; padding: 32px 20px 48px; text-align: center; }
+      h1 { font-weight: 600; letter-spacing: .3em; margin: 0 0 4px; font-size: 28px; }
+      .sub { font-style: italic; margin: 0 0 26px; color: #5b4e63; }
+      .sheet { display: inline-block; background: #fff; padding: 14mm; border-radius: 6px; box-shadow: 0 10px 40px -12px rgba(0,0,0,.25); }
+      .marker { width: 100mm; height: 100mm; display: block; image-rendering: pixelated; }
+      .cut { margin-top: 10px; font-size: 12px; color: #8a7f90; letter-spacing: .08em; }
+      ol { text-align: left; max-width: 34em; margin: 28px auto 0; line-height: 1.6; }
+      .actions { margin-top: 24px; }
+      button, a.btn { font: inherit; padding: 12px 22px; border-radius: 999px; border: 1px solid #c9954f; background: linear-gradient(135deg,#fbe7bd,#e2b871); color: #1b130a; cursor: pointer; text-decoration: none; display: inline-block; margin: 4px; }
+      a.btn.alt { background: transparent; }
+      @media print {
+        body { background: #fff; }
+        .no-print { display: none !important; }
+        .sheet { box-shadow: none; padding: 0; }
+        main { padding: 0; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>PORTAL</h1>
+      <p class="sub">Marcador de ancoragem · ArUco MIP 36h12 · nº 7</p>
+      <div class="sheet">
+        <img class="marker" src="./marker.svg" alt="Marcador quadrado preto e branco do PORTAL" />
+        <p class="cut">Imprima em 100% (sem “ajustar à página”) · lado do quadrado preto ≈ 8 cm</p>
+      </div>
+      <ol class="no-print">
+        <li>Imprima esta página em papel branco fosco (ou mostre-a na tela de outro aparelho com brilho alto).</li>
+        <li>Mantenha a borda branca ao redor do quadrado preto — ela é necessária para a detecção.</li>
+        <li>Coloque o marcador sobre uma mesa ou no chão, bem iluminado e sem reflexos.</li>
+        <li>No celular, abra o PORTAL, toque em <strong>ABRIR MEU PORTAL</strong> e aponte a câmera para o marcador.</li>
+      </ol>
+      <div class="actions no-print">
+        <button type="button" onclick="window.print()">Imprimir</button>
+        <a class="btn alt" href="./">Voltar ao PORTAL</a>
+      </div>
+    </main>
+  </body>
+</html>
