@@ -68,7 +68,7 @@ export function startMotes(canvas: HTMLCanvasElement) {
 export function describeCapabilities(c: Capabilities): { text: string; tone: 'good' | 'ok' | 'warn' } {
   if (!c.webgl) return { text: 'Seu navegador não suporta WebGL — o portal não pode abrir aqui.', tone: 'warn' };
   if (c.webxrAR) return { text: 'Realidade aumentada com detecção de superfícies disponível', tone: 'good' };
-  if (c.camera) return { text: c.mobile ? 'Câmera disponível · use o marcador impresso ou o posicionamento manual' : 'Câmera disponível · modo marcador (ideal no celular)', tone: 'ok' };
+  if (c.camera) return { text: 'Sem detecção de superfícies neste navegador · o portal abre sobre a câmera', tone: 'ok' };
   if (!c.secure) return { text: 'A câmera exige HTTPS · explore o mundo em 3D', tone: 'warn' };
   return { text: 'Câmera indisponível · explore o mundo em 3D', tone: 'warn' };
 }
