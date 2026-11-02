@@ -118,8 +118,12 @@ async function tapObject(page, expr) {
     const p = window.__portal;
     // eslint-disable-next-line no-eval
     const o = eval(expr);
+    const cam = p.currentMode === 'explore' ? p.engine.camera : p.engine.activeCamera;
+    // matrixWorldInverse is only refreshed when a frame renders; on slow machines the camera may
+    // have moved since the last frame, so refresh it before projecting (the app does the same).
+    cam.updateMatrixWorld();
     const v = o.getWorldPosition(new o.position.constructor());
-    v.project(p.currentMode === 'explore' ? p.engine.camera : p.engine.activeCamera);
+    v.project(cam);
     const r = document.getElementById('ui-root').getBoundingClientRect();
     return { x: r.left + (v.x * 0.5 + 0.5) * r.width, y: r.top + (-v.y * 0.5 + 0.5) * r.height };
   }, expr);
