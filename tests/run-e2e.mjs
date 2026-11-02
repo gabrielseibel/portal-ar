@@ -19,8 +19,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 
-const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const dist = path.join(root, 'dist');
 const out = path.join(root, 'tests', 'output');
 fs.mkdirSync(out, { recursive: true });
@@ -501,6 +502,116 @@ console.log(`\nPORTAL e2e — serving dist at ${ORIGIN}${BASE}\n`);
     await page.waitForFunction(() => window.__portal?.stage.kind === 'fantasia' && window.__portal.phase !== 'hidden', null, { timeout: 120000 });
   });
   await test('sem erros de JavaScript (suite Vale Alecrim)', async () => {
+    assert(errors.length === 0, errors.join(' | '));
+  });
+  await browser.close();
+}
+
+// ================================================================ suite F: Fazenda da Duda (third world, the user's models)
+{
+  const browser = await chromium.launch({ args: GL_ARGS });
+  const page = await browser.newPage({ viewport: { width: 900, height: 700 } });
+  currentPage = page;
+  const errors = [];
+  watchErrors(page, errors);
+  const W = 'p.stage.world';
+  await maybeThrottle(page);
+  const look = (cam, target) =>
+    page.evaluate(([c, t]) => {
+      const p = window.__portal;
+      p.engine.camera.position.set(...c);
+      p.explore.controls.target.set(...t);
+      p.explore.controls.update();
+    }, [cam, target]);
+  await test('duda: seletor de mundo, modelos carregados e portal aberto', async () => {
+    await page.goto(URL_);
+    await page.click('.world-opt[data-world="duda"]');
+    assert((await page.getAttribute('.world-opt[data-world="duda"]', 'aria-checked')) === 'true', 'picker');
+    await page.click('#explore-3d');
+    await page.waitForFunction(() => window.__portal?.phase === 'open', null, { timeout: 180000 });
+    const info = await page.evaluate(() => {
+      const w = window.__portal.stage.world;
+      const names = [];
+      w.group.traverse((o) => o.isMesh && names.push(o.name));
+      return { kind: window.__portal.stage.kind, err: w.loadError, trees: w.trees.length, farm: names.includes('fazenda-cenario'), house: !!w.group.getObjectByName('casa-da-duda') };
+    });
+    assert(info.kind === 'duda', 'world kind');
+    assert(!info.err, 'load error: ' + info.err);
+    assert(info.farm && info.house, 'farm voxel model + farmhouse GLB in the scene');
+    assert(info.trees > 30, 'trees ' + info.trees);
+    await page.evaluate(() => {
+      const p = window.__portal;
+      p.explore.controls.autoRotate = false;
+      p.explore.controls.enableDamping = false;
+      p.stage.world.timeScale = 0;
+    });
+    await look([0.1, 2.5, 2.2], [0, 1.0, 0]);
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: path.join(out, 'e2e-duda.png') });
+  });
+  await test('duda: a Duda fala ao toque', async () => {
+    await page.evaluate(() => (window.__portal.stage.world.talk = 99)); // stand still
+    const hit = await tapObject(page, `${W}.duda.hitProxy`);
+    assert(hit === 'duda', 'hit ' + hit);
+    await page.waitForSelector('.speech.on');
+    assert((await page.textContent('.speech')).startsWith('Duda:'), 'speech');
+  });
+  await test('duda: colheita das cinco plantações → descoberta', async () => {
+    await page.evaluate(() => window.__portal.discoveries.reset());
+    await look([0.45, 1.9, 1.0], [0.45, 1.05, -0.1]);
+    await page.waitForTimeout(300);
+    for (const k of ['tomato', 'pumpkin', 'blueberry', 'cauli', 'strawberry']) {
+      if (k === 'strawberry') await look([0.0, 1.8, 0.9], [0.0, 1.05, -0.05]);
+      const hit = await tapObject(page, `${W}.proxies['field:${k}']`);
+      assert(hit === `field:${k}`, `field ${k}: ${hit}`);
+    }
+    assert(await page.evaluate(() => window.__portal.discoveries.has('duda-colheita')), 'harvest discovery');
+    const g = await page.evaluate(() => Math.max(...Object.values(window.__portal.stage.world.growth)));
+    assert(g < 0.2, 'fields regrowing ' + g);
+  });
+  await test('duda: Biscoito, galinhas (ovo dourado) e colmeias (mel)', async () => {
+    await look([-0.25, 1.6, 0.0], [-0.2, 1.05, -0.38]);
+    await page.waitForTimeout(300);
+    assert((await tapObject(page, `${W}.proxies.dog`)) === 'dog', 'dog');
+    assert(await page.evaluate(() => window.__portal.stage.world.dogAwake), 'dog awake');
+    await look([0.75, 1.6, 0.5], [0.65, 1.05, -0.05]);
+    await page.waitForTimeout(300);
+    for (let i = 0; i < 3; i++) assert((await tapObject(page, `${W}.proxies.chickens`)) === 'chickens', 'chickens');
+    assert(await page.evaluate(() => window.__portal.stage.world.eggVisible), 'golden egg');
+    assert((await tapObject(page, `${W}.proxies.egg`)) === 'egg', 'egg tap');
+    await look([0.2, 1.7, 0.2], [0.13, 1.05, -0.45]);
+    await page.waitForTimeout(300);
+    for (let i = 0; i < 3; i++) assert((await tapObject(page, `${W}.proxies.hives`)) === 'hives', 'hives');
+    const d = await page.evaluate(() => ['duda-biscoito', 'duda-ovo', 'duda-mel'].map((id) => window.__portal.discoveries.has(id)));
+    assert(d.every(Boolean), 'discoveries ' + d);
+  });
+  await test('duda: noite → Flor da Lua na estufa; casa adianta o tempo', async () => {
+    await page.evaluate(() => (window.__portal.stage.world.timeOfDay = 0.97));
+    await page.waitForTimeout(300);
+    await look([-0.3, 1.6, 0.1], [-0.35, 1.08, -0.38]);
+    await page.waitForTimeout(300);
+    assert((await tapObject(page, `${W}.proxies.greenhouse`)) === 'greenhouse', 'greenhouse');
+    assert(await page.evaluate(() => window.__portal.discoveries.has('duda-lua')), 'moon flower');
+    await look([-0.4, 1.6, 0.6], [-0.4, 1.1, 0.0]);
+    await page.waitForTimeout(300);
+    const t0 = await page.evaluate(() => window.__portal.stage.world.timeOfDay);
+    assert((await tapObject(page, `${W}.proxies.house`)) === 'house', 'house');
+    const t1 = await page.evaluate(() => window.__portal.stage.world.timeOfDay);
+    assert(Math.abs(((t1 - t0 + 1) % 1) - 0.5) < 0.01, 'time skipped ' + t0 + '→' + t1);
+    await page.click('.card .card-close');
+    await page.waitForTimeout(450);
+  });
+  await test('duda: pesca no lago + painel de descobertas', async () => {
+    await look([-0.02, 1.7, 1.2], [-0.02, 1.05, 0.38]);
+    await page.waitForTimeout(300);
+    { const hit = await tapObject(page, `${W}.proxies.pond`); assert(hit === 'pond', 'pond tap hit: ' + hit); }
+    await page.waitForFunction(() => /Fisgou|Arco/.test(document.querySelector('.hint')?.textContent + document.querySelector('.card')?.textContent), null, { timeout: 30000 });
+    await page.click('.dock-btn[aria-label="Descobertas"]');
+    await page.waitForSelector('.panel-wrap.on');
+    assert(/[4-7] de 7/.test(await page.textContent('.panel-eyebrow')), 'panel ' + (await page.textContent('.panel-eyebrow')));
+    await page.click('.panel-close');
+  });
+  await test('sem erros de JavaScript (suite Fazenda da Duda)', async () => {
     assert(errors.length === 0, errors.join(' | '));
   });
   await browser.close();

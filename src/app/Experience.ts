@@ -10,6 +10,9 @@ import { Discoveries, type DiscoveryId } from '../interactions/Discoveries';
 import { World } from '../world/World';
 import { FarmWorld } from '../world/farm/FarmWorld';
 import { FARM_DISCOVERIES } from '../world/farm/discoveries';
+import { DudaWorld } from '../world/duda/DudaWorld';
+import { DUDA_DISCOVERIES } from '../world/duda/discoveries';
+import { FIELD_NAMES, type FieldKind } from '../world/duda/layout';
 import type { AudioEngine } from '../audio/AudioEngine';
 import type { ARMode, ModeKind, PlacementStatus } from '../ar/ARMode';
 import { CameraFeed, CameraError, preauthorizeCamera } from '../ar/CameraFeed';
@@ -71,9 +74,19 @@ export class Experience {
   static async create(audio: AudioEngine, quality: QualitySettings, kind: WorldKind = 'fantasia') {
     const exp = new Experience(audio, quality, kind);
     await nextFrame();
+    await exp.worldReady();
     await exp.warmupStage();
     void loadOptionalModels(exp.stage.world.group);
     return exp;
+  }
+
+  /** Worlds built from external models load them asynchronously. */
+  private async worldReady() {
+    const w = this.stage.world;
+    if (w instanceof DudaWorld) {
+      await w.ready;
+      if (w.loadError) this.overlay.hint('Não foi possível carregar os modelos da fazenda. Recarregue a página.', 8000);
+    }
   }
 
   /** Compile every shader up front (three skips invisible objects, so reveal them briefly). */
@@ -97,6 +110,7 @@ export class Experience {
     this.worldKind = kind;
     this.stage = new Stage(this.engine.scene, this.quality, kind);
     this.bindWorld();
+    await this.worldReady();
     await this.warmupStage();
     this.overlay.loading(false);
   }
@@ -200,7 +214,12 @@ export class Experience {
 
   /** Wires the current Stage/world into the experience (events, discoveries, touch targets). */
   private bindWorld() {
-    this.discoveries = this.worldKind === 'vila' ? new Discoveries(FARM_DISCOVERIES, 'discoveries.vila') : new Discoveries();
+    this.discoveries =
+      this.worldKind === 'vila'
+        ? new Discoveries(FARM_DISCOVERIES, 'discoveries.vila')
+        : this.worldKind === 'duda'
+          ? new Discoveries(DUDA_DISCOVERIES, 'discoveries.duda')
+          : new Discoveries();
     this.overlay.setDiscoveryCount(this.discoveries.count, this.discoveries.total);
     this.discoveries.onChange = () => this.overlay.setDiscoveryCount(this.discoveries.count, this.discoveries.total);
     this.discoveries.onFound = (d, n) => {
@@ -239,7 +258,8 @@ export class Experience {
         if (!this.discoveries.has('espirito')) this.overlay.hint('Algo brilhante se move na campina…', 5000);
       };
       this.registerInteractions();
-    } else this.registerFarmInteractions(this.stage.world);
+    } else if (this.stage.world instanceof FarmWorld) this.registerFarmInteractions(this.stage.world);
+    else this.registerDudaInteractions(this.stage.world);
   }
 
   // ------------------------------------------------------------------ helpers
@@ -602,7 +622,7 @@ export class Experience {
 
   private startAmbience() {
     const w = this.stage.world;
-    if (w instanceof FarmWorld) {
+    if (!(w instanceof World)) {
       this.audio.startAmbience(w.sounds.map((p) => w.group.localToWorld(p.clone())));
       return;
     }
@@ -985,6 +1005,213 @@ export class Experience {
         },
       });
     }
+  }
+
+  // ------------------------------------------------------------------ Fazenda da Duda interactions
+  private registerDudaInteractions(w: DudaWorld) {
+    const st = this.stage;
+    const add = this.interactions.add.bind(this.interactions);
+    const P = w.proxies;
+    const burstAt = (o: THREE.Object3D | THREE.Vector3, n: number, color: string, colorEnd: string, speed = 0.3, gravity = 0) =>
+      st.bursts.burst(this.toStage(o instanceof THREE.Vector3 ? w.group.localToWorld(o.clone()) : o), n, speed, { life: 1.3, size: 0.02, color, colorEnd, gravity });
+    let chickenTaps = 0;
+    let casts = 0;
+    let line = 0;
+
+    const DUDA_LINES = [
+      'Oi! Eu sou a Duda. Bem-vindo à minha fazenda!',
+      'Toque nas plantações para colher. Elas crescem de novo rapidinho.',
+      'O Biscoito dorme o dia inteiro perto da estufa… se você deixar.',
+      'As galinhas adoram atenção. Às vezes até demais!',
+      'Dizem que no lago vive uma carpa de todas as cores.',
+      'À noite a estufa fica diferente. Eu juro que vi uma luz lá dentro.',
+      'Perdi meu trevo da sorte em algum lugar na campina da frente…',
+      'Se cansar, toque na casa: a gente descansa até o sol mudar.',
+    ];
+    add({
+      name: 'duda',
+      object: w.duda.hitProxy,
+      priority: 4,
+      onTap: () => {
+        w.greet(4.5);
+        this.audio.voice(this.worldPos(w.duda.root), 1.35);
+        this.say(`Duda: “${DUDA_LINES[line++ % DUDA_LINES.length]}”`, w.duda.head, 4.5);
+      },
+    });
+
+    // crops
+    for (const k of Object.keys(FIELD_NAMES) as FieldKind[]) {
+      add({
+        name: `field:${k}`,
+        object: P[`field:${k}`],
+        onTap: () => {
+          const [one, many] = FIELD_NAMES[k];
+          if (!w.harvest(k)) return this.overlay.hint(`A plantação de ${one} ainda está crescendo… volte daqui a pouco.`, 3200);
+          const c = w.fieldCenter(k);
+          for (let i = 0; i < 4; i++) burstAt(c.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.15, 0, (Math.random() - 0.5) * 0.15)), 8, '#fff3b0', '#7fc75a', 0.25, 0.4);
+          this.audio.harvest(this.worldPos(P[`field:${k}`]), 6);
+          Haptics.soft();
+          this.overlay.hint(`Você colheu ${many}! (${w.harvested.size}/5 plantações)`, 3000);
+          if (w.harvested.size === 5) this.discover('duda-colheita');
+        },
+      });
+    }
+
+    // the farmhouse: rest until the light changes
+    add({
+      name: 'house',
+      object: P.house,
+      onTap: () => {
+        w.skipTime(0.5);
+        w.puffSmoke();
+        this.audio.villageBells(this.worldPos(P.house));
+        this.overlay.card('Casa da Duda', 'Onde tudo começa', `Café passado, pão de queijo no forno e a varanda virada para a horta. A Duda descansou um pouco: agora são ${w.clock}${w.isNight ? ', noite' : ''}.`, 7000);
+      },
+    });
+    add({
+      name: 'barn',
+      object: P.barn,
+      onTap: () => {
+        this.audio.moo(this.worldPos(P.barn));
+        this.overlay.card('Celeiro Vermelho', 'Feno e ferramentas', 'Lá dentro moram a Mimosa e a Estrela, duas vacas que só saem quando a Duda canta.', 6000);
+      },
+    });
+    add({
+      name: 'shed',
+      object: P.shed,
+      onTap: () => {
+        this.audio.ui();
+        this.overlay.card('Galpão', 'Sementes e regadores', 'Prateleiras de sementes, três regadores furados e um caderno com as receitas da vó da Duda.', 6000);
+      },
+    });
+    add({
+      name: 'scarecrow',
+      object: P.scarecrow,
+      onTap: () => {
+        this.audio.ui();
+        this.overlay.hint('O espantalho Seu Palha cuida da horta. Os corvos fingem que têm medo.', 3500);
+      },
+    });
+
+    // secrets
+    add({
+      name: 'dog',
+      object: P.dog,
+      priority: 4,
+      onTap: () => {
+        const first = w.wakeDog();
+        this.audio.voice(this.worldPos(P.dog), 2.1);
+        burstAt(P.dog, 14, '#fff1c4', '#ffb04a', 0.2, -0.1);
+        if (first) {
+          this.overlay.hint('Biscoito acordou e foi correndo atrás da Duda!', 3500);
+          this.discover('duda-biscoito');
+        }
+      },
+    });
+    add({
+      name: 'chickens',
+      object: P.chickens,
+      onTap: () => {
+        w.exciteChickens();
+        this.audio.cluck(this.worldPos(P.chickens));
+        chickenTaps++;
+        if (chickenTaps >= 3 && !this.discoveries.has('duda-ovo') && w.showEgg()) this.overlay.hint('Uma galinha botou algo brilhante na grama!', 4000);
+      },
+    });
+    add({ name: 'coop', object: P.coop, onTap: () => (w.exciteChickens(), this.audio.cluck(this.worldPos(P.coop), 0.9)) });
+    add({
+      name: 'egg',
+      object: P.egg,
+      priority: 5,
+      enabled: () => w.eggVisible,
+      onTap: () => {
+        burstAt(P.egg, 30, '#fff0b0', '#ffb52e', 0.35);
+        this.audio.chest(this.worldPos(P.egg));
+        w.takeEgg();
+        this.discover('duda-ovo');
+      },
+    });
+    add({
+      name: 'hives',
+      object: P.hives,
+      onTap: () => {
+        const honey = w.buzzHives();
+        burstAt(P.hives, 16, '#ffe14d', '#ffb21a', 0.25, -0.05);
+        this.audio.crystalChime(this.worldPos(P.hives), 1);
+        if (honey) {
+          this.overlay.hint('As abelhas deixaram um pote de mel dourado!', 3500);
+          this.discover('duda-mel');
+        } else if (w.hiveTaps < 3) this.overlay.hint('Bzzz… as abelhas estão ficando curiosas.', 2500);
+      },
+    });
+    add({
+      name: 'greenhouse',
+      object: P.greenhouse,
+      onTap: () => {
+        if (w.isNight) {
+          w.bloomMoonFlower();
+          burstAt(P.greenhouse, 36, '#dffcff', '#7fd6ff', 0.3, -0.12);
+          this.audio.spiritChime(this.worldPos(P.greenhouse));
+          this.discover('duda-lua');
+          return;
+        }
+        this.audio.ui();
+        this.overlay.card('Estufa de Vidro', 'Mudas e flores raras', 'Morangos o ano inteiro, orquídeas da vó e um vaso misterioso com uma plaquinha: “só à noite”.', 6500);
+      },
+    });
+    add({
+      name: 'clover',
+      object: P.clover,
+      priority: 5,
+      onTap: () => {
+        w.findClover();
+        burstAt(P.clover, 26, '#e9ffd0', '#5fd15a', 0.25, -0.1);
+        this.audio.crystalChime(this.worldPos(P.clover), 4);
+        this.discover('duda-trevo');
+      },
+    });
+
+    // fishing
+    const FISH = ['Lambari', 'Tilápia', 'Carpa-dourada', 'Bagre-bigodudo', 'Peixinho-vermelho'];
+    let legendaryNext = false;
+    w.onCatch = (where) => {
+      this.audio.splash(w.group.localToWorld(where.clone()));
+      burstAt(where, 14, '#e9fbff', '#7fc7e8', 0.2, 0.6);
+      if (legendaryNext) {
+        this.overlay.card('Carpa Arco-íris', 'Pesca lendária', 'Ela saltou, brilhou em todas as cores e voltou para o fundo do lago. A Duda ficou sem palavras.', 7000);
+        this.discover('duda-peixe');
+      } else this.overlay.hint(`Fisgou: ${FISH[Math.floor(Math.random() * FISH.length)]}!`, 3000);
+    };
+    add({
+      name: 'pond',
+      object: P.pond,
+      onTap: () => {
+        if (!w.cast()) return;
+        casts++;
+        legendaryNext = !this.discoveries.has('duda-peixe') && (casts >= 5 || (casts >= 3 && Math.random() < 0.3));
+        w.setFishLook(legendaryNext);
+        this.audio.splash(this.worldPos(P.pond), 0.4);
+      },
+    });
+
+    // the trees are known once the farm model has loaded
+    void w.ready.then(() => {
+      if (this.stage.world !== w) return;
+      w.trees.forEach((tr, i) => {
+        const fruity = tr.kind === 'apple' || tr.kind === 'orange';
+        const color = tr.kind === 'apple' ? '#e5383b' : tr.kind === 'orange' ? '#ff9b2f' : tr.kind === 'blossom' ? '#f7bdd6' : tr.kind === 'autumn' ? '#f2b233' : '#7fd26a';
+        add({
+          name: `tree:${i}`,
+          object: tr.proxy,
+          onTap: () => {
+            w.shakeTree(tr);
+            burstAt(tr.center, fruity ? 10 : 18, color, color, 0.22, fruity ? 1.4 : 0.25);
+            this.audio.harvest(this.worldPos(tr.proxy), 2);
+            Haptics.tap();
+          },
+        });
+      });
+    });
   }
 
   // ------------------------------------------------------------------ frame
