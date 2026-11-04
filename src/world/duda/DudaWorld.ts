@@ -8,14 +8,17 @@ import { clamp, damp, dampAngle, distToPolyline, mulberry32, range, smoothstep }
 
 /** A spot in the bay, in front of the beach. */
 const BAY: P2 = [0.72, 0.9];
+import { Villager } from './people';
+import { animalGeometry, catGeometry, chickenGeometry, duckGeometry } from './animals';
+import { ANIMALS, BEACH_CABIN, FISH_SHOP, MANHOLE, OASIS, PASTURE, PETS, RANCH, RANCH_HOUSE, TENT, TRAILER, VILLAGERS, WIZARD_TOWER, type AnimalSpec } from './cast';
 import { buildTerrain, coastZ, edgeFactor, heightAt, nearestRiver } from './terrain';
 import {
-  Batcher, PaintedPerson, blob, characterMaterial, cottage, footbridge, buildTrees, cone, createMats, cropGeometry, greenhouse, building, localMatrix, scatter, sphere, townBuilding, type Mats, type TreeSpot,
+  Batcher, PaintedPerson, blob, characterMaterial, cottage, footbridge, buildTrees, createMats, cropGeometry, greenhouse, building, localMatrix, scatter, sphere, townBuilding, type Mats, type TreeSpot,
 } from './kit';
 import {
   BARN, BRIDGES, CABIN, CLOVER, COAST, COOP, DESERT, DOG_BED, FARM, FARM_GATE, FARM_TREES, FIELDS, FOREST_EAST, FOREST_NORTH, FOREST_POND, FOREST_PONDS, FOREST_SOUTH, FOREST_WEST,
   GREENHOUSE, HIVES, HOUSE, KEG, LAKE, STUMPS, WELL,
-  MAILBOX, MINE, MOUNTAINS, ORCHARD, PATHS, PEN, PIERS, PLAZA, POND, ROUTE, SCARECROW, SEA_Y, SHED, TOWN_BUILDINGS, TOWN_HOMES, WALKERS, WATERFALL, inRect, rectCenter,
+  MAILBOX, MINE, MOUNTAINS, ORCHARD, PATHS, PEN, PIERS, PLAZA, POND, ROUTE, SCARECROW, SEA_Y, SHED, TOWN_BUILDINGS, TOWN_HOMES, WATERFALL, inRect, rectCenter,
   type FieldKind, type P2, type Rect,
 } from './layout';
 
@@ -41,12 +44,20 @@ export interface FarmTree {
 
 export interface Walker {
   name: string;
-  p: PaintedPerson;
+  p: Villager;
   lines: readonly string[];
-  route: readonly P2[];
+  route?: readonly P2[];
+  at: P2;
+  pitch: number;
   u: number;
   pause: number;
   leg: number;
+}
+
+export interface Pet {
+  spec: AnimalSpec;
+  root: THREE.Object3D;
+  proxy: THREE.Mesh;
 }
 
 const gy = (x: number, z: number) => Math.max(heightAt(x, z), 0);
@@ -64,6 +75,8 @@ export class DudaWorld {
   readonly sounds: THREE.Vector3[] = [];
   readonly trees: FarmTree[] = [];
   readonly villagers: Walker[] = [];
+  readonly pets: Pet[] = [];
+  private roamers: Critter[] = [];
   /** Resolves when the farmhouse model is in place (never rejects). */
   readonly ready: Promise<void>;
   loadError: string | null = null;
@@ -174,14 +187,15 @@ export class DudaWorld {
       this.droplets.push(d);
       this.group.add(d);
     }
-    for (const w of WALKERS) {
-      const [skin, hair, shirt, pants, hat] = w.style;
-      const p = new PaintedPerson({ skin, hair, shirt, pants, hat, longHair: w.name === 'Lia' || w.name === 'Nina' });
-      const [x, z] = w.route[0];
+    for (const v of VILLAGERS) {
+      const p = new Villager(v.look);
+      const [x, z] = v.route ? v.route[0] : v.at;
       p.root.position.set(x, gy(x, z), z);
+      p.root.rotation.y = Math.atan2(PLAZA.x - x, PLAZA.z - z);
       this.group.add(p.root);
-      this.villagers.push({ name: w.name, p, lines: w.lines, route: w.route, u: rng(), pause: 0, leg: 0 });
+      this.villagers.push({ name: v.name, p, lines: v.lines, route: v.route, at: v.at, pitch: v.pitch ?? 1, u: rng(), pause: 0, leg: rng() * 6 });
     }
+    this.buildPetsAndAnimals(rng);
     ({ dog: this.dog, tail: this.dogTail } = this.buildDog());
     this.zzz = new THREE.Sprite(new THREE.SpriteMaterial({ map: zzzTexture(), transparent: true, depthWrite: false }));
     this.zzz.scale.setScalar(0.035);
@@ -420,6 +434,57 @@ export class DudaWorld {
       const top = cottage(b, m, { w: c.w, d: c.d, h: c.h, wall: m.wall[c.wall], roof: m.roof(c.roof), trim: m.paint(c.trim) });
       if (top) chimneys.push(top.applyMatrix4(b.frame));
     }
+    // the Wizard's tower in the western forest
+    b.at(WIZARD_TOWER.x, gy(WIZARD_TOWER.x, WIZARD_TOWER.z), WIZARD_TOWER.z);
+    b.add(new THREE.CylinderGeometry(0.036, 0.042, 0.16, 14), m.stone, localMatrix(0, 0.08, 0));
+    b.add(new THREE.ConeGeometry(0.05, 0.08, 14), m.roof('#6a3ab8'), localMatrix(0, 0.2, 0));
+    b.add(new THREE.PlaneGeometry(0.022, 0.04), m.door, localMatrix(0, 0.02, 0.0405));
+    for (const y of [0.07, 0.12]) b.add(new THREE.PlaneGeometry(0.016, 0.016), m.window, localMatrix(0, y, 0.039));
+    // Linus' tent on the mountain
+    b.at(TENT.x, gy(TENT.x, TENT.z), TENT.z, 0.5);
+    b.add(new THREE.ConeGeometry(0.04, 0.05, 4).rotateY(Math.PI / 4), m.paint('#c9a066'), localMatrix(0, 0.025, 0));
+    b.add(new THREE.CylinderGeometry(0.008, 0.01, 0.006, 8), m.stone, localMatrix(0.05, 0.003, 0.03));
+    // Willy's fish shop and Elliott's beach cabin
+    b.at(FISH_SHOP.x, gy(FISH_SHOP.x, FISH_SHOP.z), FISH_SHOP.z, Math.PI);
+    building(b, { w: 0.1, d: 0.07, h: 0.055, wall: m.wall.blue, roof: m.roof('#c9563c'), mats: m, windows: 1, sign: 'Peixaria' });
+    b.at(BEACH_CABIN.x, gy(BEACH_CABIN.x, BEACH_CABIN.z), BEACH_CABIN.z, Math.PI);
+    const ec = building(b, { w: 0.08, d: 0.07, h: 0.05, wall: m.wall.plaster, roof: m.roof('#4f8fd8'), mats: m, windows: 1, chimney: true });
+    if (ec) chimneys.push(ec.applyMatrix4(b.frame));
+    // Pam and Penny's trailer
+    b.at(TRAILER.x, gy(TRAILER.x, TRAILER.z), TRAILER.z, 0.2);
+    b.box(0, 0.008, 0, 0.12, 0.045, 0.06, m.paint('#e8e0cc'));
+    b.box(0, 0.053, 0, 0.124, 0.006, 0.064, m.paint('#7a8a9a'));
+    b.box(0, 0.025, 0.0305, 0.12, 0.008, 0.001, m.paint('#5aa0d8'));
+    b.add(new THREE.PlaneGeometry(0.022, 0.035), m.door, localMatrix(0.03, 0.026, 0.031));
+    b.add(new THREE.PlaneGeometry(0.024, 0.016), m.window, localMatrix(-0.025, 0.035, 0.031));
+    for (const sx of [-0.04, 0.04]) b.add(new THREE.CylinderGeometry(0.008, 0.008, 0.006, 10).rotateX(Math.PI / 2), m.paint('#2a2a2e'), localMatrix(sx, 0.008, 0.031));
+    // Sandy's oasis stand in the desert
+    b.at(OASIS.x, gy(OASIS.x, OASIS.z), OASIS.z);
+    building(b, { w: 0.09, d: 0.07, h: 0.05, wall: m.wall.plaster, roof: m.roof('#e8a33a'), mats: m, windows: 1, sign: 'Oásis' });
+    // Marnie's ranch: house, pasture fence, hay
+    b.at(RANCH_HOUSE.x, gy(RANCH_HOUSE.x, RANCH_HOUSE.z), RANCH_HOUSE.z, -Math.PI / 2);
+    const rc = cottage(b, m, { w: 0.13, d: 0.1, h: 0.065, wall: m.wall.red, roof: m.roof('#7a4a2e'), trim: m.paint('#f2e6c8') });
+    if (rc) chimneys.push(rc.applyMatrix4(b.frame));
+    this.fence(b, [
+      [PASTURE[0], PASTURE[2]],
+      [PASTURE[1], PASTURE[2]],
+      [PASTURE[1], PASTURE[3] - 0.05],
+    ]);
+    this.fence(b, [
+      [PASTURE[1], PASTURE[3]],
+      [PASTURE[0], PASTURE[3]],
+      [PASTURE[0], PASTURE[2]],
+    ]);
+    for (const [x, z] of [
+      [-0.58, -0.54],
+      [-0.56, -0.7],
+    ] as P2[]) {
+      b.at(x, gy(x, z), z);
+      b.add(new THREE.CylinderGeometry(0.012, 0.012, 0.016, 12).rotateZ(Math.PI / 2), m.paint('#e8c86a'), localMatrix(0, 0.012, 0));
+    }
+    // Krobus' manhole
+    b.at(MANHOLE.x, gy(MANHOLE.x, MANHOLE.z) + 0.001, MANHOLE.z);
+    b.add(new THREE.CylinderGeometry(0.014, 0.014, 0.002, 14), m.paint('#4a4a52'), localMatrix(0, 0.001, 0));
     b.at(CABIN.x, gy(CABIN.x, CABIN.z), CABIN.z, 0.4);
     const cabinTop = building(b, { w: 0.09, d: 0.07, h: 0.05, wall: m.darkWood, roof: m.roof('#8a5a30'), mats: m, windows: 1, chimney: true });
     if (cabinTop) chimneys.push(cabinTop.applyMatrix4(b.frame));
@@ -488,6 +553,8 @@ export class DudaWorld {
     if (coastZ(x) - z < 0.06 + margin) return true;
     for (const p of [POND, ...FOREST_PONDS]) if (Math.hypot(x - p.x, z - p.z) < p.r + 0.035) return true;
     if (Math.hypot(x - CABIN.x, z - CABIN.z) < 0.1) return true;
+    if (inRect(x, z, RANCH, 0.02)) return true;
+    for (const q of [WIZARD_TOWER, TENT, FISH_SHOP, BEACH_CABIN, TRAILER, OASIS, MANHOLE]) if (Math.hypot(x - q.x, z - q.z) < 0.09) return true;
     if (Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r + 0.05) return true;
     if (Math.abs(x - WATERFALL.x) < 0.07 && z > WATERFALL.top - 0.05 && z < WATERFALL.bottom + 0.06) return true;
     if (Math.hypot(x - MINE.x, z - MINE.z) < 0.08) return true;
@@ -641,22 +708,13 @@ export class DudaWorld {
   }
 
   // ================================================================== animals & secrets
+  /** Biscoito, Duda's yellow cat (asleep by the greenhouse until you wake it). */
   private buildDog() {
-    const fur = '#d9a066';
-    const dark = '#9a6334';
     const dog = new THREE.Group();
-    dog.add(blob([
-      [sphere(0.011, 0.9, 0.85, 1.5), fur, 0, 0.012, 0],
-      [sphere(0.009), fur, 0, 0.02, 0.015],
-      [sphere(0.005, 1, 0.8, 1.2), '#f0d2a8', 0, 0.017, 0.022],
-      [sphere(0.0018), '#2a1c14', 0, 0.018, 0.027],
-      [sphere(0.004, 0.6, 1.3, 1), dark, -0.0075, 0.02, 0.013],
-      [sphere(0.004, 0.6, 1.3, 1), dark, 0.0075, 0.02, 0.013],
-      ...[-1, 1].flatMap((sx) => [-1, 1].map((sz) => [new THREE.CylinderGeometry(0.0028, 0.0028, 0.01, 6), fur, sx * 0.006, 0.005, sz * 0.009] as [THREE.BufferGeometry, string, number, number, number])),
-    ]));
+    const body = new THREE.Mesh(catGeometry('#f2b33a', '#fbe6b0'), characterMaterial());
+    body.castShadow = true;
+    dog.add(body);
     const tail = new THREE.Group();
-    tail.position.set(0, 0.016, -0.015);
-    tail.add(blob([[new THREE.CapsuleGeometry(0.002, 0.01, 2, 6).rotateX(-0.6), dark, 0, 0.004, -0.004]]));
     dog.add(tail);
     dog.position.set(DOG_BED.x, gy(DOG_BED.x, DOG_BED.z), DOG_BED.z);
     dog.rotation.y = 0.6;
@@ -665,19 +723,49 @@ export class DudaWorld {
     return { dog, tail };
   }
 
+  /** Pets of the townsfolk and the animals of the ranch and the farm. */
+  private buildPetsAndAnimals(rng: () => number) {
+    const make = (a: AnimalSpec) => {
+      const root = new THREE.Group();
+      const m = new THREE.Mesh(animalGeometry(a.kind, a.colors), characterMaterial());
+      m.castShadow = true;
+      root.add(m);
+      const [x, z] = a.at;
+      root.position.set(x, gy(x, z), z);
+      root.rotation.y = rng() * Math.PI * 2;
+      if (a.kind === 'cat' || a.kind === 'dog') root.rotation.y = Math.atan2(PLAZA.x - x, PLAZA.z - z) * 0.3 + rng() * 0.6;
+      this.group.add(root);
+      if (a.area) {
+        const [x0, x1, z0, z1] = a.area;
+        const big = a.kind === 'cow' || a.kind === 'pig' || a.kind === 'goat';
+        this.roamers.push({ root, target: new THREE.Vector2(x, z), bounds: { x0, x1, z0, z1 }, speed: big ? 0.012 : a.kind === 'turtle' ? 0.006 : 0.025, wait: rng() * 4, hop: 0 });
+      }
+      return root;
+    };
+    for (const a of PETS) {
+      const root = make(a);
+      const proxy = new THREE.Mesh(new THREE.SphereGeometry(0.022, 8, 6), new THREE.MeshBasicMaterial({ visible: false }));
+      proxy.position.y = 0.014;
+      proxy.name = `pet-${a.name}`;
+      root.add(proxy);
+      this.pets.push({ spec: a, root, proxy });
+    }
+    for (const a of ANIMALS) make(a);
+  }
+
   private buildChickens(rng: () => number) {
     const bounds = { x0: PEN[0] + 0.02, x1: PEN[1] - 0.02, z0: PEN[2] + 0.02, z1: PEN[3] - 0.02 };
-    for (let i = 0; i < 5; i++) {
-      const body = i === 2 ? '#c9874a' : '#f7f3ea';
-      const root = blob([[sphere(0.008, 1, 0.95, 1.2), body, 0, 0.009, 0], [sphere(0.004), '#f2b23a', 0, 0.002, 0], [cone(0.004, 0.009, -0.9), body, 0, 0.012, -0.009]]);
-      const head = blob([[sphere(0.0055), body, 0, 0, 0], [sphere(0.0028, 0.6, 1, 1.2), '#e3402f', 0, 0.005, 0], [cone(0.0018, 0.004, Math.PI / 2), '#f2b23a', 0, 0, 0.006]]);
-      head.position.set(0, 0.018, 0.007);
-      root.add(head);
+    const colors = ['#b8703a', '#c98a4a', '#2e2a30', '#3a3438', '#f7f3ea', '#efe6d4'];
+    for (const body of colors) {
+      const root = new THREE.Group();
+      const m = new THREE.Mesh(chickenGeometry(body), characterMaterial());
+      m.castShadow = true;
+      root.add(m);
       const x = range(rng, bounds.x0, bounds.x1);
       const z = range(rng, bounds.z0, bounds.z1);
       root.position.set(x, gy(x, z), z);
       this.group.add(root);
-      this.chickens.push({ root, head, target: new THREE.Vector2(x, z), bounds, speed: 0.04, wait: rng() * 2, hop: 0 });
+      this.chickens.push({ root, target: new THREE.Vector2(x, z), bounds, speed: 0.04, wait: rng() * 2, hop: 0 });
     }
   }
 
@@ -699,7 +787,8 @@ export class DudaWorld {
 
   private buildDucks() {
     for (let i = 0; i < 3; i++) {
-      const d = blob([[sphere(0.007, 0.9, 0.7, 1.3), '#fafafa', 0, 0.003, 0], [sphere(0.0045), i === 1 ? '#2f8a5a' : '#fafafa', 0, 0.009, 0.006], [cone(0.002, 0.005, Math.PI / 2), '#f2a23a', 0, 0.008, 0.011]]);
+      const d = new THREE.Group();
+      d.add(new THREE.Mesh(i === 1 ? duckGeometry('#2f8a5a', '#c9b89a') : duckGeometry('#f4f1e8'), characterMaterial()));
       d.userData.ph = i * 2.1;
       d.userData.sea = i === 2;
       this.ducks.push(d);
@@ -842,6 +931,15 @@ export class DudaWorld {
     for (const s of TOWN_BUILDINGS) this.proxy(s.id, at(s.x, s.z, s.h * 0.7), 0, 0, [s.w, s.h * 1.5, s.d], s.rot);
     TOWN_HOMES.forEach((h, i) => this.proxy(`home${i}`, at(h.x, h.z, h.h * 0.7), 0, 0, [h.w, h.h * 1.6, h.d + 0.04], h.rot));
     this.proxy('cabin', at(CABIN.x, CABIN.z, 0.04), 0.07, 0.09);
+    this.proxy('tower', at(WIZARD_TOWER.x, WIZARD_TOWER.z, 0.1), 0.045, 0.22);
+    this.proxy('tent', at(TENT.x, TENT.z, 0.025), 0.04, 0.05);
+    this.proxy('fishshop', at(FISH_SHOP.x, FISH_SHOP.z, 0.04), 0, 0, [0.1, 0.09, 0.07]);
+    this.proxy('beachcabin', at(BEACH_CABIN.x, BEACH_CABIN.z, 0.04), 0, 0, [0.08, 0.08, 0.07]);
+    this.proxy('trailer', at(TRAILER.x, TRAILER.z, 0.03), 0, 0, [0.12, 0.06, 0.06], 0.2);
+    this.proxy('oasis', at(OASIS.x, OASIS.z, 0.04), 0, 0, [0.09, 0.08, 0.07]);
+    this.proxy('ranch', at(RANCH_HOUSE.x, RANCH_HOUSE.z, 0.05), 0, 0, [0.1, 0.1, 0.13]);
+    const [rx, rz] = rectCenter(PASTURE);
+    this.proxy('pasture', at(rx, rz, 0.02), 0, 0, [PASTURE[1] - PASTURE[0], 0.05, PASTURE[3] - PASTURE[2]]);
     this.proxy('fountain', at(PLAZA.x, PLAZA.z, 0.03), 0.065, 0.06);
     const [[ax, az], [bx, bz]] = PIERS[0];
     this.proxy('pier', new THREE.Vector3((ax + bx) / 2, SEA_Y + 0.02, (az + bz) / 2), 0, 0, [0.06, 0.04, Math.hypot(bx - ax, bz - az)], Math.atan2(bx - ax, bz - az));
@@ -1024,6 +1122,7 @@ export class DudaWorld {
     this.updateWalkers(dt);
     this.updateDog(dt, t);
     this.updateChickens(dt, t);
+    this.updateRoamers(dt);
 
     this.ducks.forEach((d, i) => {
       const a = t * 0.16 + d.userData.ph;
@@ -1146,14 +1245,17 @@ export class DudaWorld {
   private updateWalkers(dt: number) {
     for (const v of this.villagers) {
       const p = v.p.root.position;
-      if (v.pause > 0) {
-        v.pause -= dt;
+      const r = v.route;
+      if (v.pause > 0 || !r) {
+        v.pause = Math.max(0, v.pause - dt);
+        v.leg += dt * 0.8;
         v.p.walk(0, 0);
+        v.p.body.rotation.y = Math.sin(v.leg) * 0.25; // idle: looks around
         continue;
       }
-      const r = v.route;
+      v.p.body.rotation.y = 0;
       const total = r.reduce((s, _q, i) => s + Math.hypot(r[(i + 1) % r.length][0] - r[i][0], r[(i + 1) % r.length][1] - r[i][1]), 0);
-      v.u = (v.u + (dt * 0.035) / total) % 1;
+      v.u = (v.u + (dt * 0.03) / total) % 1;
       let d = v.u * total;
       for (let i = 0; i < r.length; i++) {
         const a = r[i];
@@ -1168,7 +1270,7 @@ export class DudaWorld {
         d -= L;
       }
       p.y = gy(p.x, p.z);
-      v.leg += dt * 8;
+      v.leg += dt * 9;
       v.p.walk(v.leg, 1);
     }
   }
@@ -1201,6 +1303,28 @@ export class DudaWorld {
     this.dogTail.rotation.y = Math.sin(t * (moving || this.dogHop > 0 ? 18 : 6)) * 0.7;
   }
 
+  private updateRoamers(dt: number) {
+    for (const c of this.roamers) {
+      const p = c.root.position;
+      if (c.wait > 0) {
+        c.wait -= dt;
+        continue;
+      }
+      const dx = c.target.x - p.x;
+      const dz = c.target.y - p.z;
+      const d = Math.hypot(dx, dz);
+      if (d < 0.008) {
+        c.wait = range(Math.random, 1.5, 6);
+        c.target.set(range(Math.random, c.bounds.x0, c.bounds.x1), range(Math.random, c.bounds.z0, c.bounds.z1));
+      } else {
+        p.x += (dx / d) * c.speed * dt;
+        p.z += (dz / d) * c.speed * dt;
+        c.root.rotation.y = dampAngle(c.root.rotation.y, Math.atan2(dx, dz), 5, dt);
+      }
+      p.y = gy(p.x, p.z);
+    }
+  }
+
   private updateChickens(dt: number, t: number) {
     this.chickenExcite = Math.max(0, this.chickenExcite - dt);
     const fast = this.chickenExcite > 0 ? 2.4 : 1;
@@ -1209,7 +1333,7 @@ export class DudaWorld {
       const p = c.root.position;
       if (c.wait > 0) {
         c.wait -= dt * fast;
-        if (c.head) c.head.rotation.x = Math.max(0, Math.sin(t * 9 + p.x * 40)) * 0.8;
+        c.root.rotation.x = Math.max(0, Math.sin(t * 9 + p.x * 40)) * 0.25;
       } else {
         const dx = c.target.x - p.x;
         const dz = c.target.y - p.z;

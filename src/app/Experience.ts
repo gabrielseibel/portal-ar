@@ -1029,7 +1029,9 @@ export class Experience {
     const DUDA_LINES = [
       'Oi! Eu sou a Duda. Bem-vindo à minha fazenda!',
       'Toque nas plantações para colher. Elas crescem de novo rapidinho.',
-      'O Biscoito dorme o dia inteiro perto da estufa… se você deixar.',
+      'O Biscoito, meu gato amarelo, dorme o dia inteiro perto da estufa… se você deixar.',
+      'Na vila mora um monte de gente: a Abigail, o Sam, a Penny… vá dizer oi!',
+      'O Mago mora numa torre na floresta. Dizem que ele sabe do portal.',
       'As galinhas adoram atenção. Às vezes até demais!',
       'Dizem que no lago vive uma carpa de todas as cores.',
       'À noite a estufa fica diferente. Eu juro que vi uma luz lá dentro.',
@@ -1111,10 +1113,10 @@ export class Experience {
       priority: 4,
       onTap: () => {
         const first = w.wakeDog();
-        this.audio.voice(this.worldPos(P.dog), 2.1);
+        this.audio.meow(this.worldPos(P.dog));
         burstAt(P.dog, 14, '#fff1c4', '#ffb04a', 0.2, -0.1);
         if (first) {
-          this.overlay.hint('Biscoito acordou e foi correndo atrás da Duda!', 3500);
+          this.overlay.hint('Biscoito, o gato amarelo, acordou e foi atrás da Duda!', 3500);
           this.discover('duda-biscoito');
         }
       },
@@ -1216,20 +1218,49 @@ export class Experience {
       });
     }
     const HOMES = [
-      ['Casa da Lia', 'Doutora da vila', 'Vasos de camomila na janela e um gato que finge ser o dono da casa.'],
-      ['Casa do Seu Tonico', 'O vizinho mais antigo', 'Ele planta abóboras desde antes da Duda nascer e jura que fala com elas.'],
-      ['Casa do Bento', 'Pescador e alpinista', 'Varas de pesca, cordas e um mapa da montanha cheio de anotações.'],
-      ['Casa da Nina', 'A curiosa do vale', 'Desenhos do Biscoito colados por toda a parede do quarto.'],
+      ['Casa do Prefeito Lewis', 'Ao lado da praça', 'Papéis da prefeitura por todo lado, o cachorro Bolinha no tapete e uma gaveta trancada que ninguém sabe o que guarda.'],
+      ['Casa da Emily e da Haley', 'Duas irmãs bem diferentes', 'De um lado, cristais e uma máquina de costura; do outro, câmeras, espelhos e a gata Neve.'],
+      ['Casa da Jodi', 'Com o Kent, o Sam e o Vincent', 'Roupa no varal, a guitarra do Sam encostada na porta e brinquedos do Vincent pelo quintal.'],
+      ['Casa da Evelyn e do George', 'Os avós do Alex', 'Cheiro de biscoito saindo do forno e a TV ligada no último volume.'],
     ];
     TOWN_HOMES.forEach((_h, i) => {
       const [title, sub, text] = HOMES[i % HOMES.length];
       add({ name: `home${i}`, object: P[`home${i}`], onTap: () => (this.audio.ui(), this.overlay.card(title, sub, text, 7000)) });
     });
+    const PLACES: Record<string, [string, string, string]> = {
+      cabin: ['Cabana da Leah', 'À beira do lago da floresta', 'Esculturas de madeira na varanda, tintas espalhadas e uma janela que dá para o lago.'],
+      tower: ['Torre do Mago', 'No coração da floresta', 'Uma torre de pedra com runas brilhando à noite. O Mago Rasmodius estuda ali as forças mágicas do vale.'],
+      tent: ['Barraca do Linus', 'Na encosta da montanha', 'Uma fogueira apagada, frutas silvestres secando e o céu inteiro como teto.'],
+      fishshop: ['Peixaria do Willy', 'Na praia', 'Varas de pesca, iscas e histórias de peixes enormes. Foi o Willy quem deu a primeira vara para a Duda.'],
+      beachcabin: ['Cabana do Elliott', 'De frente para o mar', 'Uma máquina de escrever, pilhas de papel e o barulho das ondas. O romance está quase pronto… há anos.'],
+      trailer: ['Trailer da Pam e da Penny', 'Perto do rio', 'Pequeno e cheio de livros da Penny. A Pam jura que um dia volta a dirigir o ônibus.'],
+      oasis: ['Oásis da Sandy', 'No deserto', 'Sementes do deserto, roupas coloridas e um ventilador que nunca dá conta do calor.'],
+      ranch: ['Rancho da Marnie', 'Com a Jas e o Shane', 'Feno, ração, ferramentas para os bichos e um gato dormindo no balcão.'],
+    };
+    for (const [key, [title, sub, text]] of Object.entries(PLACES)) add({ name: key, object: P[key], onTap: () => (this.audio.ui(), this.overlay.card(title, sub, text, 8000)) });
     add({
-      name: 'cabin',
-      object: P.cabin,
-      onTap: () => (this.audio.ui(), this.overlay.card('Cabana do Lenhador', 'À beira do lago da floresta', 'Lenha empilhada, uma chaleira sempre quente e um mapa das trilhas de areia que cortam a mata.', 7000)),
+      name: 'pasture',
+      object: P.pasture,
+      onTap: () => {
+        this.audio.moo(this.worldPos(P.pasture));
+        this.overlay.hint('Mimosa, Estrela e Canjica mugem; as cabras e os porcos nem ligam.', 3500);
+      },
     });
+    for (const pet of w.pets) {
+      add({
+        name: `pet:${pet.spec.name}`,
+        object: pet.proxy,
+        priority: 3,
+        onTap: () => {
+          const k = pet.spec.kind;
+          if (k === 'cat') this.audio.meow(this.worldPos(pet.root));
+          else if (k === 'dog') this.audio.voice(this.worldPos(pet.root), 2.4);
+          else this.audio.ui();
+          burstAt(pet.proxy, 10, '#ffd1e8', '#ff8ab6', 0.15, -0.05);
+          this.overlay.hint(`${pet.spec.name}${pet.spec.owner ? `, de ${pet.spec.owner}` : ''}, gostou do carinho!`, 3000);
+        },
+      });
+    }
     add({
       name: 'fountain',
       object: P.fountain,
@@ -1266,7 +1297,7 @@ export class Experience {
         priority: 3,
         onTap: () => {
           v.pause = Math.max(v.pause, 3.5);
-          this.audio.voice(this.worldPos(v.p.root), v.name === 'Nina' ? 1.6 : v.name === 'Seu Tonico' ? 0.8 : 1.1);
+          this.audio.voice(this.worldPos(v.p.root), v.pitch);
           this.say(`${v.name}: “${v.lines[vl++ % v.lines.length]}”`, v.p.head, 4.5);
         },
       });

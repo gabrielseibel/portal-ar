@@ -95,11 +95,11 @@ const at = (mx: number, my: number) => {
 };
 export const TOWN_BUILDINGS: readonly BuildingSpec[] = [
   { id: 'center', x: 0.34, z: -0.2, w: 0.2, d: 0.11, h: 0.085, rot: 0, wall: 'stone', roof: '#3f6fa8', tower: true, title: 'Centro Comunitário', sub: 'O coração do vale', text: 'Aqui acontecem as festas da colheita, os bailes de inverno e as reuniões em que todo mundo fala ao mesmo tempo. O relógio da torre adianta cinco minutos, e ninguém conserta.' },
-  { id: 'clinic', x: 0.53, z: -0.13, w: 0.11, d: 0.09, h: 0.07, rot: -Math.PI / 2, wall: 'plaster', roof: '#4f7fb8', title: 'Clínica do Vale', sub: 'Doutora Lia', text: 'Curativos, chás de camomila e uma placa: “Abelhas não são motivo de pânico.”' },
-  { id: 'saloon', x: 0.52, z: 0.15, w: 0.14, d: 0.1, h: 0.075, rot: -Math.PI / 2, wall: 'red', roof: '#6b3a2a', title: 'Taverna Estrela', sub: 'Música aos sábados', text: 'Sopa de abóbora no inverno, suco de framboesa no verão e um piano que só toca três músicas.' },
-  { id: 'store', x: 0.96, z: -0.16, w: 0.15, d: 0.1, h: 0.075, rot: -Math.PI / 2, wall: 'blue', roof: '#3f6fa8', title: 'Mercado do Vale', sub: 'Sementes e miudezas', text: 'Sementes da estação, regadores, fitas e aquele doce de leite que a Duda compra toda sexta.' },
-  { id: 'smithy', x: 0.9, z: 0.15, w: 0.12, d: 0.09, h: 0.065, rot: 0, wall: 'stone', roof: '#5b5f6e', title: 'Ferreiro', sub: 'Ferramentas e ferraduras', text: 'O martelo começa às seis da manhã. A Duda diz que é o despertador oficial do vale.' },
-  { id: 'carpenter', ...at(800, 105), w: 0.13, d: 0.1, h: 0.07, rot: 0, wall: 'wood', roof: '#3d8a4f', title: 'Carpintaria', sub: 'No pé da montanha', text: 'Tábuas cheirando a pinho e uma lista enorme de pedidos: celeiros, pontes, um banco novo para a praça.' },
+  { id: 'clinic', x: 0.53, z: -0.13, w: 0.11, d: 0.09, h: 0.07, rot: -Math.PI / 2, wall: 'plaster', roof: '#4f7fb8', title: 'Clínica do Harvey', sub: 'Com a ajuda da Maru', text: 'Check-ups, curativos e uma placa: “Abelhas não são motivo de pânico.” Nos fundos, um aeromodelo pela metade.' },
+  { id: 'saloon', x: 0.52, z: 0.15, w: 0.14, d: 0.1, h: 0.075, rot: -Math.PI / 2, wall: 'red', roof: '#6b3a2a', title: 'Salão Fruta Estrelar', sub: 'Do Gus', text: 'Pizza, sopa de abóbora e um jukebox que só toca três músicas. À noite a vila inteira passa por aqui.' },
+  { id: 'store', x: 0.96, z: -0.16, w: 0.15, d: 0.1, h: 0.075, rot: -Math.PI / 2, wall: 'blue', roof: '#3f6fa8', title: 'Armazém do Pierre', sub: 'Sementes e miudezas', text: 'Sementes da estação, fertilizante e aquele doce de leite que a Duda compra toda sexta. O Pierre vive de olho no preço da concorrência.' },
+  { id: 'smithy', x: 0.9, z: 0.15, w: 0.12, d: 0.09, h: 0.065, rot: 0, wall: 'stone', roof: '#5b5f6e', title: 'Ferreiro do Clint', sub: 'Ferramentas e geodos', text: 'O martelo começa às seis da manhã. O Clint quebra geodos para quem pedir, mas fica vermelho quando a Emily passa.' },
+  { id: 'carpenter', ...at(800, 105), w: 0.13, d: 0.1, h: 0.07, rot: 0, wall: 'wood', roof: '#3d8a4f', title: 'Carpintaria da Robin', sub: 'Casa do Demetrius, da Maru e do Sebastian', text: 'Tábuas cheirando a pinho, o laboratório do Demetrius no fundo e a música do Sebastian vindo do porão.' },
 ];
 /** Painted cottages of the townsfolk (the farmhouse model is Duda's alone). */
 export interface CottageSpec {
@@ -197,7 +197,6 @@ export const MOUNTAINS: ReadonlyArray<{ x: number; z: number; h: number; r: numb
   { ...at(1180, 200), h: 0.16, r: 0.12 },
   // gentle hills north of town
   { ...at(760, 120), h: 0.1, r: 0.25 },
-  { ...at(620, 200), h: 0.08, r: 0.2 },
 ];
 export const MINE = { x: M(1150, 160)[0], z: M(1150, 160)[1] };
 export const FOREST_WEST: Rect = MR(40, 470, 290, 900);
@@ -230,6 +229,12 @@ export const PATHS: ReadonlyArray<ReadonlyArray<P2>> = [
   [M(880, 560), [0.42, 0.3], [0.5, 0.3]],
   // farm → west forest → desert road
   [[-0.74, -0.06], M(400, 470), M(420, 380), M(465, 260)],
+  // farm → north, up the ledge to Marnie's ranch
+  [FARM_GATE, [-0.06, -0.2], [-0.06, -0.42], [-0.2, -0.56], [-0.26, -0.6]],
+  // beach: fish shop and Elliott's cabin; trailer by the south river
+  [[0.413, 0.607], [0.62, 0.65]],
+  [[0.8, 0.66], [0.99, 0.66]],
+  [[0.27, 0.48], [0.18, 0.5]],
   // farm → south bridge → southern woods
   [[-0.3, 0.25], M(620, 600), M(620, 700)],
 ];
@@ -254,32 +259,4 @@ export const ROUTE: readonly Stop[] = [
   [-0.08, -0.05, 0],
   [-0.15, -0.05, 0],
   [-0.3, -0.06, 0],
-];
-
-/** Town folk walking loops. */
-export const WALKERS: ReadonlyArray<{ name: string; route: readonly P2[]; lines: readonly string[]; style: [skin: string, hair: string, shirt: string, pants: string, hat?: string] }> = [
-  {
-    name: 'Seu Tonico',
-    route: [M(840, 430), M(930, 430), M(930, 510), M(840, 510)],
-    lines: ['Bom dia! A fonte da praça está mais cheia hoje.', 'Na minha época, as abóboras eram do tamanho de carroças.'],
-    style: ['#e8b58e', '#d9d4cc', '#7a8a5a', '#4a3b2f', '#6b4a2e'],
-  },
-  {
-    name: 'Lia',
-    route: [M(880, 560), M(880, 650), M(930, 720), M(880, 650)],
-    lines: ['Vai à praia? Leve chapéu, o sol do vale engana.', 'Se uma abelha te picar, passe na clínica.'],
-    style: ['#c98e6a', '#2a1c14', '#ffffff', '#4a6fb5'],
-  },
-  {
-    name: 'Bento',
-    route: [M(1010, 470), M(1060, 470), M(1100, 440), M(1110, 300), M(1100, 440), M(1060, 470)],
-    lines: ['Já subiu até o lago da montanha? Tem uma mina lá em cima.', 'O rio desce gelado lá de cima.'],
-    style: ['#a8724e', '#3a2618', '#c9874a', '#3d3a4f'],
-  },
-  {
-    name: 'Nina',
-    route: [M(800, 520), M(830, 495), M(940, 495), M(985, 515), M(940, 495), M(830, 495)],
-    lines: ['Você viu o Biscoito? Ele adora dormir perto da estufa.', 'Quando eu crescer quero ter uma fazenda igual à da Duda!'],
-    style: ['#f1c19a', '#e0a23a', '#ff8ab6', '#7a5ad8'],
-  },
 ];
