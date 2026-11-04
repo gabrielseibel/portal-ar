@@ -31,7 +31,7 @@ export const FIELDS: Record<FieldKind, Rect> = {
   pumpkin: [-0.47, -0.35, -0.02, 0.08],
   blueberry: [-0.62, -0.5, 0.11, 0.21],
   cauli: [-0.47, -0.35, 0.11, 0.21],
-  strawberry: [-0.3, -0.19, 0.12, 0.21],
+  strawberry: [-0.3, -0.19, 0.1, 0.19],
 };
 export const FIELD_NAMES: Record<FieldKind, [string, string]> = {
   tomato: ['tomate', 'tomates'],
@@ -43,17 +43,33 @@ export const FIELD_NAMES: Record<FieldKind, [string, string]> = {
 /** The user's farmhouse model (leveled + squared, 0.76 wide × 1 deep); depth in island units. */
 export const HOUSE = { x: -0.3, z: -0.24, depth: 0.2 };
 export const GREENHOUSE = { x: -0.61, z: -0.28, w: 0.16, d: 0.13 };
-export const HIVES = { x: -0.61, z: -0.14 };
+/** Row of beehives along a short fence, front-left of the house (like the reference photo). */
+export const HIVES = { x: -0.45, z: -0.165 };
 export const SHED = { x: -0.68, z: 0.0, w: 0.07, d: 0.06 };
 export const BARN = { x: -0.15, z: -0.29, w: 0.12, d: 0.1 };
 export const COOP = { x: -0.15, z: -0.1, w: 0.09, d: 0.07 };
 export const PEN: Rect = [-0.26, -0.11, -0.03, 0.07];
-export const POND = { x: -0.46, z: -0.18, r: 0.055 };
+export const POND = { x: -0.655, z: 0.17, r: 0.048 };
 export const SCARECROW = { x: -0.485, z: 0.095 };
 export const DOG_BED = { x: -0.5, z: -0.3 };
 export const CLOVER = { x: -0.4, z: 0.235 };
-export const MAILBOX = { x: -0.22, z: -0.1 };
-export const ORCHARD: Rect = [-0.72, -0.65, 0.07, 0.24];
+export const MAILBOX = { x: -0.215, z: -0.115 };
+export const ORCHARD: Rect = [-0.74, -0.6, 0.06, 0.25];
+/** Trees inside the farm fence (blossom by the well, fruit trees by the pond). */
+export const FARM_TREES: ReadonlyArray<[number, number, 'blossom' | 'apple' | 'orange' | 'green']> = [
+  [-0.11, 0.0, 'blossom'],
+  [-0.715, 0.07, 'apple'],
+  [-0.6, 0.235, 'orange'],
+  [-0.715, 0.235, 'blossom'],
+  [-0.69, -0.36, 'green'],
+];
+export const WELL = { x: -0.125, z: 0.17 };
+export const KEG = { x: -0.205, z: -0.19 };
+export const STUMPS: readonly P2[] = [
+  [-0.72, -0.1],
+  [-0.1, 0.23],
+  [-0.56, -0.36],
+];
 export const FARM_GATE: P2 = [-0.08, -0.05];
 
 // ------------------------------------------------------------------ town (centre of the map)
@@ -66,7 +82,7 @@ export interface BuildingSpec {
   d: number;
   h: number;
   rot: number;
-  wall: 'wood' | 'plaster' | 'stone' | 'red' | 'blue';
+  wall: 'wood' | 'plaster' | 'stone' | 'red' | 'blue' | 'green';
   roof: string;
   title: string;
   sub: string;
@@ -85,12 +101,23 @@ export const TOWN_BUILDINGS: readonly BuildingSpec[] = [
   { id: 'smithy', x: 0.9, z: 0.15, w: 0.12, d: 0.09, h: 0.065, rot: 0, wall: 'stone', roof: '#5b5f6e', title: 'Ferreiro', sub: 'Ferramentas e ferraduras', text: 'O martelo começa às seis da manhã. A Duda diz que é o despertador oficial do vale.' },
   { id: 'carpenter', ...at(800, 105), w: 0.13, d: 0.1, h: 0.07, rot: 0, wall: 'wood', roof: '#3d8a4f', title: 'Carpintaria', sub: 'No pé da montanha', text: 'Tábuas cheirando a pinho e uma lista enorme de pedidos: celeiros, pontes, um banco novo para a praça.' },
 ];
-/** Copies of the user's farmhouse used as town homes (position, rotation, roof tint). */
-export const TOWN_HOMES: ReadonlyArray<{ x: number; z: number; rot: number; roof: string }> = [
-  { x: 0.07, z: -0.19, rot: 0, roof: '#e0a23a' },
-  { x: 0.08, z: 0.2, rot: Math.PI, roof: '#4f8fd8' },
-  { x: 0.5, z: 0.4, rot: Math.PI, roof: '#9a6ad8' },
-  { ...at(930, 205), rot: 0, roof: '#4fae6a' },
+/** Painted cottages of the townsfolk (the farmhouse model is Duda's alone). */
+export interface CottageSpec {
+  x: number;
+  z: number;
+  rot: number;
+  w: number;
+  d: number;
+  h: number;
+  wall: 'wood' | 'plaster' | 'stone' | 'red' | 'blue' | 'green';
+  roof: string;
+  trim: string;
+}
+export const TOWN_HOMES: readonly CottageSpec[] = [
+  { x: 0.08, z: -0.19, rot: 0, w: 0.13, d: 0.1, h: 0.065, wall: 'green', roof: '#4f5a74', trim: '#f2e6c8' },
+  { x: 0.08, z: 0.2, rot: Math.PI, w: 0.12, d: 0.1, h: 0.06, wall: 'plaster', roof: '#c9563c', trim: '#7a4f2c' },
+  { x: 0.5, z: 0.4, rot: Math.PI, w: 0.12, d: 0.095, h: 0.06, wall: 'stone', roof: '#4f8fd8', trim: '#f2e6c8' },
+  { ...at(930, 205), rot: 0, w: 0.13, d: 0.1, h: 0.065, wall: 'wood', roof: '#4fae6a', trim: '#5a3a22' },
 ];
 
 // ------------------------------------------------------------------ water
@@ -124,6 +151,23 @@ export const RIVERS: ReadonlyArray<{ pts: readonly P2[]; w: number; top: number;
 ];
 export const LAKE = { x: M(1050, 190)[0], z: M(1050, 190)[1], r: 0.09, y: 0.13 };
 export const FOREST_POND = { x: M(425, 605)[0], z: M(425, 605)[1], r: 0.07 };
+/** Ponds in the western forest, with sandy rims (like the forest reference photo). */
+export const FOREST_PONDS: ReadonlyArray<{ x: number; z: number; r: number }> = [
+  FOREST_POND,
+  { x: M(300, 700)[0], z: M(300, 700)[1], r: 0.09 },
+  { x: M(170, 520)[0], z: M(170, 520)[1], r: 0.06 },
+  { x: M(330, 830)[0], z: M(330, 830)[1], r: 0.05 },
+];
+/** Woodcutter's cabin by the forest pond. */
+export const CABIN = { x: M(340, 560)[0], z: M(340, 560)[1] };
+/** Sandy trails winding through the forest. */
+export const FOREST_TRAILS: ReadonlyArray<ReadonlyArray<P2>> = [
+  [M(400, 470), M(360, 540), M(330, 620), M(300, 700), M(260, 780), M(330, 830)],
+  [M(330, 620), M(250, 600), M(170, 520), M(110, 430)],
+  [M(360, 540), M(420, 560)],
+];
+/** A rocky ledge north of the farm and the forest (cliffs like the reference photos). */
+export const TERRACE = { z: M(0, 300)[1] - 0.03, x1: M(700, 0)[0], h: 0.055 };
 export const WATERFALL = { x: M(1050, 0)[0], top: M(1050, 190)[1] + 0.08, bottom: M(1050, 250)[1] };
 export const PIERS: readonly (readonly [P2, P2])[] = [
   [M(962, 765), M(962, 845)],

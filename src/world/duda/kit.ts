@@ -110,6 +110,8 @@ export interface Mats {
   white: THREE.MeshStandardMaterial;
   clock: THREE.MeshStandardMaterial;
   sign: (text: string) => THREE.MeshStandardMaterial;
+  /** Plain painted colour (trims, posts). */
+  paint: (color: string) => THREE.MeshStandardMaterial;
   all: () => THREE.Material[];
 }
 
@@ -117,6 +119,7 @@ export function createMats(): Mats {
   const std = (o: THREE.MeshStandardMaterialParameters) => new THREE.MeshStandardMaterial({ roughness: 0.9, metalness: 0, ...o });
   const roofs = new Map<string, THREE.MeshStandardMaterial>();
   const signs = new Map<string, THREE.MeshStandardMaterial>();
+  const paints = new Map<string, THREE.MeshStandardMaterial>();
   const m: Mats = {
     wall: {
       wood: std({ map: woodTexture('#c98a4a') }),
@@ -124,6 +127,7 @@ export function createMats(): Mats {
       stone: std({ map: stoneTexture('#a39a8a') }),
       red: std({ map: woodTexture('#b8503a') }),
       blue: std({ map: woodTexture('#5a86b8') }),
+      green: std({ map: woodTexture('#8aa08a') }),
     },
     roof: (c) => {
       let r = roofs.get(c);
@@ -143,7 +147,12 @@ export function createMats(): Mats {
       if (!s) signs.set(t, (s = std({ map: signTexture(t) })));
       return s;
     },
-    all: () => [...Object.values(m.wall), ...roofs.values(), ...signs.values(), m.stone, m.wood, m.darkWood, m.door, m.window, m.glass, m.white, m.clock],
+    paint: (c) => {
+      let p = paints.get(c);
+      if (!p) paints.set(c, (p = std({ color: c })));
+      return p;
+    },
+    all: () => [...Object.values(m.wall), ...roofs.values(), ...signs.values(), ...paints.values(), m.stone, m.wood, m.darkWood, m.door, m.window, m.glass, m.white, m.clock],
   };
   return m;
 }
@@ -207,6 +216,55 @@ export function townBuilding(b: Batcher, s: BuildingSpec, mats: Mats, groundY: n
     b.add(new THREE.CircleGeometry(0.02, 20), mats.clock, T(0, s.h + 0.065, tw / 2 + 0.001));
   }
   return chimney;
+}
+
+/** A painted cottage for the townsfolk: porch with posts, steps, chimney (front door on +Z). */
+export function cottage(
+  b: Batcher,
+  mats: Mats,
+  o: { w: number; d: number; h: number; wall: THREE.Material; roof: THREE.Material; trim: THREE.Material; porch?: boolean },
+) {
+  const { w, d, h } = o;
+  const top = building(b, { w, d, h, wall: o.wall, roof: o.roof, mats, windows: 2, chimney: true, roofH: d * 0.5 });
+  // trims on the corners
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) b.box((sx * w) / 2, 0.012, (sz * d) / 2, 0.006, h - 0.012, 0.006, o.trim);
+  if (o.porch !== false) {
+    const pd = 0.035;
+    b.box(0, 0, d / 2 + pd / 2, w * 0.86, 0.012, pd, mats.wood);
+    b.box(0, 0, d / 2 + pd + 0.008, w * 0.3, 0.006, 0.016, mats.wood);
+    for (const sx of [-1, 1]) b.box(sx * w * 0.4, 0.012, d / 2 + pd - 0.004, 0.006, h * 0.72, 0.006, o.trim);
+    b.box(0, 0.012 + h * 0.72, d / 2 + pd / 2, w * 0.9, 0.006, pd + 0.01, o.roof);
+  }
+  return top;
+}
+
+/** Solid arched footbridge: planks along local Z, rails on both sides. */
+export function footbridge(b: Batcher, mats: Mats, len = 0.15, width = 0.05) {
+  const n = 9;
+  const rise = 0.016;
+  const seg = len / n;
+  for (let i = 0; i < n; i++) {
+    const u0 = i / n - 0.5;
+    const u1 = (i + 1) / n - 0.5;
+    const y0 = rise * (1 - 4 * u0 * u0);
+    const y1 = rise * (1 - 4 * u1 * u1);
+    const zc = ((u0 + u1) / 2) * len;
+    const tilt = Math.atan2(y1 - y0, seg);
+    b.box(0, (y0 + y1) / 2 - 0.003, zc, width, 0.006, seg * 1.04, i % 2 ? mats.wood : mats.darkWood, -tilt);
+  }
+  for (const sx of [-1, 1]) {
+    for (let i = 0; i <= 4; i++) {
+      const u = i / 4 - 0.5;
+      b.box((sx * width) / 2, rise * (1 - 4 * u * u), u * len, 0.004, 0.022, 0.004, mats.darkWood);
+    }
+    for (let i = 0; i < 4; i++) {
+      const u0 = i / 4 - 0.5;
+      const u1 = (i + 1) / 4 - 0.5;
+      const y0 = rise * (1 - 4 * u0 * u0) + 0.02;
+      const y1 = rise * (1 - 4 * u1 * u1) + 0.02;
+      b.box((sx * width) / 2, (y0 + y1) / 2 - 0.002, ((u0 + u1) / 2) * len, 0.004, 0.004, len / 4 + 0.002, mats.darkWood, -Math.atan2(y1 - y0, len / 4));
+    }
+  }
 }
 
 /** Greenhouse: white frame + translucent glass. */

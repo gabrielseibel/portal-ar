@@ -1226,6 +1226,11 @@ export class Experience {
       add({ name: `home${i}`, object: P[`home${i}`], onTap: () => (this.audio.ui(), this.overlay.card(title, sub, text, 7000)) });
     });
     add({
+      name: 'cabin',
+      object: P.cabin,
+      onTap: () => (this.audio.ui(), this.overlay.card('Cabana do Lenhador', 'À beira do lago da floresta', 'Lenha empilhada, uma chaleira sempre quente e um mapa das trilhas de areia que cortam a mata.', 7000)),
+    });
+    add({
       name: 'fountain',
       object: P.fountain,
       onTap: () => {
