@@ -12,7 +12,7 @@ import { FarmWorld } from '../world/farm/FarmWorld';
 import { FARM_DISCOVERIES } from '../world/farm/discoveries';
 import { DudaWorld } from '../world/duda/DudaWorld';
 import { DUDA_DISCOVERIES } from '../world/duda/discoveries';
-import { FIELD_NAMES, type FieldKind } from '../world/duda/layout';
+import { FIELD_NAMES, TOWN_BUILDINGS, TOWN_HOMES, type FieldKind } from '../world/duda/layout';
 import type { AudioEngine } from '../audio/AudioEngine';
 import type { ARMode, ModeKind, PlacementStatus } from '../ar/ARMode';
 import { CameraFeed, CameraError, preauthorizeCamera } from '../ar/CameraFeed';
@@ -1035,6 +1035,9 @@ export class Experience {
       'À noite a estufa fica diferente. Eu juro que vi uma luz lá dentro.',
       'Perdi meu trevo da sorte em algum lugar na campina da frente…',
       'Se cansar, toque na casa: a gente descansa até o sol mudar.',
+      'Já foi à vila? A fonte da praça fica linda ao entardecer.',
+      'Do píer da praia dá para pescar no mar. Do lago da fazenda também!',
+      'Lá em cima, atrás da cachoeira, tem uma mina antiga.',
     ];
     add({
       name: 'duda',
@@ -1190,21 +1193,87 @@ export class Experience {
         this.discover('duda-peixe');
       } else this.overlay.hint(`Fisgou: ${FISH[Math.floor(Math.random() * FISH.length)]}!`, 3000);
     };
+    const castAt = (where: 'pond' | 'pier') => {
+      if (!w.cast(where)) return;
+      casts++;
+      legendaryNext = !this.discoveries.has('duda-peixe') && (casts >= 5 || (casts >= 3 && Math.random() < 0.3));
+      w.setFishLook(legendaryNext);
+      this.audio.splash(this.worldPos(P[where]), 0.4);
+    };
+    add({ name: 'pier', object: P.pier, onTap: () => castAt('pier') });
+
+    // the town
+    for (const s of TOWN_BUILDINGS) {
+      add({
+        name: s.id,
+        object: P[s.id],
+        onTap: () => {
+          this.overlay.card(s.title, s.sub, s.text, 9000);
+          if (s.id === 'center') this.audio.villageBells(this.worldPos(P[s.id]));
+          else if (s.id === 'smithy') this.audio.anvil(this.worldPos(P[s.id]));
+          else this.audio.ui();
+        },
+      });
+    }
+    const HOMES = [
+      ['Casa da Lia', 'Doutora da vila', 'Vasos de camomila na janela e um gato que finge ser o dono da casa.'],
+      ['Casa do Seu Tonico', 'O vizinho mais antigo', 'Ele planta abóboras desde antes da Duda nascer e jura que fala com elas.'],
+      ['Casa do Bento', 'Pescador e alpinista', 'Varas de pesca, cordas e um mapa da montanha cheio de anotações.'],
+      ['Casa da Nina', 'A curiosa do vale', 'Desenhos do Biscoito colados por toda a parede do quarto.'],
+    ];
+    TOWN_HOMES.forEach((_h, i) => {
+      const [title, sub, text] = HOMES[i % HOMES.length];
+      add({ name: `home${i}`, object: P[`home${i}`], onTap: () => (this.audio.ui(), this.overlay.card(title, sub, text, 7000)) });
+    });
+    add({
+      name: 'fountain',
+      object: P.fountain,
+      onTap: () => {
+        burstAt(P.fountain, 24, '#e9fbff', '#7fc7e8', 0.25, 0.5);
+        this.audio.splash(this.worldPos(P.fountain), 0.6);
+        this.overlay.hint('Você jogou uma moedinha na fonte e fez um pedido.', 3000);
+      },
+    });
+    add({
+      name: 'mine',
+      object: P.mine,
+      priority: 2,
+      onTap: () => {
+        burstAt(P.mine, 26, '#bff8ff', '#4fd8ff', 0.25);
+        this.audio.crystalChime(this.worldPos(P.mine), 2);
+        this.overlay.card('Mina Antiga', 'No pé da montanha', 'Trilhos enferrujados e um brilho azul lá no fundo. O Bento diz que ainda tem cristal ali dentro.', 6500);
+      },
+    });
+    add({
+      name: 'waterfall',
+      object: P.waterfall,
+      onTap: () => {
+        burstAt(P.waterfall, 20, '#ffffff', '#9fd3ff', 0.2, 0.4);
+        this.audio.splash(this.worldPos(P.waterfall), 0.8);
+        this.overlay.hint('A água desce gelada do lago da montanha e vira o rio do vale.', 3500);
+      },
+    });
+    for (const v of w.villagers) {
+      let vl = 0;
+      add({
+        name: `npc:${v.name}`,
+        object: v.p.hitProxy,
+        priority: 3,
+        onTap: () => {
+          v.pause = Math.max(v.pause, 3.5);
+          this.audio.voice(this.worldPos(v.p.root), v.name === 'Nina' ? 1.6 : v.name === 'Seu Tonico' ? 0.8 : 1.1);
+          this.say(`${v.name}: “${v.lines[vl++ % v.lines.length]}”`, v.p.head, 4.5);
+        },
+      });
+    }
     add({
       name: 'pond',
       object: P.pond,
-      onTap: () => {
-        if (!w.cast()) return;
-        casts++;
-        legendaryNext = !this.discoveries.has('duda-peixe') && (casts >= 5 || (casts >= 3 && Math.random() < 0.3));
-        w.setFishLook(legendaryNext);
-        this.audio.splash(this.worldPos(P.pond), 0.4);
-      },
+      onTap: () => castAt('pond'),
     });
 
-    // the trees are known once the farm model has loaded
-    void w.ready.then(() => {
-      if (this.stage.world !== w) return;
+    // trees: shake, fruit, petals
+    {
       w.trees.forEach((tr, i) => {
         const fruity = tr.kind === 'apple' || tr.kind === 'orange';
         const color = tr.kind === 'apple' ? '#e5383b' : tr.kind === 'orange' ? '#ff9b2f' : tr.kind === 'blossom' ? '#f7bdd6' : tr.kind === 'autumn' ? '#f2b233' : '#7fd26a';
@@ -1219,7 +1288,7 @@ export class Experience {
           },
         });
       });
-    });
+    }
   }
 
   // ------------------------------------------------------------------ frame

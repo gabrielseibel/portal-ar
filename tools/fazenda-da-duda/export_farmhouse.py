@@ -6,7 +6,7 @@ blender -b --factory-startup --python export_farmhouse.py -- <Stardew_Valley_Far
 - bakes transforms, puts the base centre at the origin, normalises the footprint to 1 unit
 - textures halved (2048 -> 1024, 1024 -> 512) and stored as WebP; materials forced opaque
 """
-import bpy, sys, mathutils
+import bpy, sys, mathutils, math
 
 src, out = sys.argv[sys.argv.index("--") + 1:][:2]
 bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -29,6 +29,22 @@ bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
 bpy.ops.object.join()
 ob = bpy.context.view_layer.objects.active
 ob.name = 'Farmhouse'
+
+# the FBX is also tilted: level it so the floors face straight up (area-weighted
+# mean of the near-horizontal faces, refined with a tighter cone each pass)
+up = mathutils.Vector((0, 0, 1))
+for cone in (0.5, 0.85, 0.95, 0.985):
+    acc = mathutils.Vector((0, 0, 0))
+    for poly in ob.data.polygons:
+        if poly.normal.dot(up) > cone:
+            acc += poly.normal * poly.area
+    if acc.length > 0:
+        up = acc.normalized()
+level = up.rotation_difference(mathutils.Vector((0, 0, 1))).to_matrix().to_4x4()
+for v in ob.data.vertices:
+    v.co = level @ v.co
+ob.data.update()
+print('tilt correction (deg)', round(math.degrees(up.angle(mathutils.Vector((0, 0, 1)))), 2))
 
 # the FBX carries an odd yaw: square the walls up with the axes (area-weighted
 # histogram of the vertical faces' directions, folded to 90 degrees)

@@ -55,18 +55,21 @@ Na tela inicial você escolhe o que sai do portal (são três mundos):
   - **Quatro estações**: toque na Árvore Anciã para mudar. Cada estação tem folhagem própria e pétalas, folhas ou neve caindo, e no inverno o chão fica coberto de neve.
   - **7 segredos próprios**: mina atrás da cachoeira, cogumelo gigante, galinha dourada, peixe lendário, tesouro enterrado, espírito noturno e uma carta misteriosa.
 
-### Fazenda da Duda (feita com os seus modelos 3D)
+### Fazenda da Duda (um vale inteiro no estilo da casa)
 
-O terceiro mundo usa os modelos do projeto próprio de imagens e 3D: a **fazenda em voxel** (`My_Stardew_Valley_Farm.fbx`) e a **casa da fazenda texturizada** (`Stardew_Valley_Farmhouse.fbx`), com as imagens de referência como guia de cores.
+O terceiro mundo é um vale pintado à mão no estilo do modelo da **casa da fazenda** (`Stardew_Valley_Farmhouse.fbx`), seguindo o mapa e as imagens de referência do projeto.
 
-- **A fazenda**: o FBX foi revoxelizado (126 × 115 × 26) e recolorido em tons vivos: grama, trilhas de terra, canteiros arados, estufa de vidro translúcido, celeiro vermelho, galinheiro, colmeias, pomar com macieiras, laranjeiras, cerejeiras e árvores douradas, lago e campina florida. Tudo vira 60 KB de dados (`public/models/fazenda-da-duda/fazenda.bin`) e a malha é montada no navegador.
-- **Casa da Duda**: o modelo da casa com as texturas pintadas originais (`casa.glb`, 250 KB, texturas em WebP), com fumaça saindo da própria chaminé do modelo.
-- **A ilha**: a fazenda flutua sobre um bloco de terra e pedra com raízes e flores penduradas, cercada por ilhotas que balançam.
-- **Vida**: a Duda faz a rotina dela (rega as plantações, olha o lago, acena para as galinhas), árvores balançam ao vento, galinhas ciscam, patos nadam, abelhas rondam as colmeias, borboletas de dia, vaga-lumes e lampiões à noite, ciclo de dia e noite.
-- **Interações**: toque na Duda (ela conversa), nas **5 plantações** para colher (elas crescem de novo), nas árvores (balançam e soltam frutas, pétalas ou folhas), na casa (descansar e adiantar o dia), no celeiro, no galpão, no espantalho e no lago para pescar.
-- **7 segredos**: Biscoito (o cachorro dorme perto da estufa e, acordado, segue a Duda), Ovo Dourado, Mel Encantado, Carpa Arco-íris, Trevo da Sorte, Flor da Lua (só à noite, dentro da estufa) e Colheita Completa.
+- **Casa da Duda**: o modelo da casa com as texturas pintadas originais (`casa.glb`, ~250 KB, WebP). No export ela é nivelada (o FBX vinha inclinado 19,6°) e alinhada (girada 33,5°), e sai fumaça da chaminé do próprio modelo. **Cópias da casa** com telhados de outras cores são as casas da vila.
+- **O vale**: relevo e chão pintados no navegador (pinceladas de grama, trilhas de terra, praça de pedras, canteiros arados, areia, rocha e neve), com:
+  - **fazenda** a sudoeste, cercada, com estufa de vidro, celeiro, galinheiro, galpão, colmeias, poço, espantalho, pomar, lago e 5 plantações;
+  - **vila** no centro: praça com chafariz, Centro Comunitário com torre do relógio (os ponteiros seguem a hora), Mercado, Taverna, Clínica, Ferreiro, bancos e lampiões;
+  - **rio** que desce do **lago da montanha** por uma cachoeira, com duas pontes, até a **baía** com praia, píer e barquinhos;
+  - **montanhas** a nordeste com pinheiros e a entrada de uma mina, e **floresta** a oeste.
+- **Vida**: a Duda faz a rotina dela (rega, visita a vila, acena para as galinhas), quatro moradores passeiam e conversam, árvores balançam, galinhas ciscam, patos nadam no lago e na baía, abelhas, borboletas, vaga-lumes, lampiões e janelas acesas à noite.
+- **Interações**: Duda e moradores (falam), plantações (colher), árvores, casa (descansar e adiantar o dia), prédios da vila e casas (cartões), chafariz, píer e lago (pescar), mina e cachoeira.
+- **7 segredos**: Biscoito, Ovo Dourado, Mel Encantado, Carpa Arco-íris, Trevo da Sorte, Flor da Lua (só à noite, na estufa) e Colheita Completa.
 
-Para regenerar os dados a partir dos FBX (Blender 4.x/5.x e Python 3 com numpy), veja [`tools/fazenda-da-duda/`](tools/fazenda-da-duda/README.md).
+Para regenerar a casa a partir do FBX (Blender 4.x/5.x), veja [`tools/fazenda-da-duda/`](tools/fazenda-da-duda/README.md).
 
 ## Como a realidade aumentada funciona (três modos reais)
 

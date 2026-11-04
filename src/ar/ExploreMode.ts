@@ -46,7 +46,8 @@ export class ExploreMode implements ARMode {
     }
     if (resetPosition) {
       const hTan = Math.tan(THREE.MathUtils.degToRad(fov / 2)) * Math.min(1, cam.aspect);
-      const dist = THREE.MathUtils.clamp(1.25 / hTan, 3.0, 7.5);
+      const big = this.stage.kind === 'duda' ? 1.75 : 1.25; // the valley is wider than the other islands
+      const dist = THREE.MathUtils.clamp(big / hTan, 3.0, 9.5);
       cam.position.set(0, 1.0, 0).add(new THREE.Vector3(0.12, 0.33, 1).normalize().multiplyScalar(dist));
       this.controls.target.set(0, 1.0, 0);
     }
