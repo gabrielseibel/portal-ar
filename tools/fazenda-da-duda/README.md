@@ -1,13 +1,13 @@
 # Fazenda da Duda: pipeline da casa
 
-Converte o modelo da casa (FBX com texturas pintadas) no `casa.glb` que o site
+Converte o modelo da casa (FBX com texturas pintadas) no `casa-nivelada.glb` que o site
 carrega de `public/models/fazenda-da-duda/`. O FBX original fica fora do
 repositório; aponte o script para onde ele estiver.
 
 Requisito: Blender 4.x ou 5.x.
 
 ```bash
-blender -b --factory-startup --python export_farmhouse.py -- Stardew_Valley_Farmhouse.fbx casa.glb
+blender -b --factory-startup --python export_farmhouse.py -- Stardew_Valley_Farmhouse.fbx casa-nivelada.glb
 ```
 
 O script:

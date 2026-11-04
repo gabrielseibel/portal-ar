@@ -59,7 +59,7 @@ Na tela inicial você escolhe o que sai do portal (são três mundos):
 
 O terceiro mundo é um vale pintado à mão no estilo do modelo da **casa da fazenda** (`Stardew_Valley_Farmhouse.fbx`), seguindo o mapa e as imagens de referência do projeto.
 
-- **Casa da Duda**: o modelo da casa com as texturas pintadas originais (`casa.glb`, ~250 KB, WebP). No export ela é nivelada (o FBX vinha inclinado 19,6°) e alinhada (girada 33,5°), e sai fumaça da chaminé do próprio modelo. **Cópias da casa** com telhados de outras cores são as casas da vila.
+- **Casa da Duda**: o modelo da casa com as texturas pintadas originais (`casa-nivelada.glb`, ~250 KB, WebP). No export ela é nivelada (o FBX vinha inclinado 19,6°) e alinhada (girada 33,5°), e sai fumaça da chaminé do próprio modelo. **Cópias da casa** com telhados de outras cores são as casas da vila.
 - **O vale**: relevo e chão pintados no navegador (pinceladas de grama, trilhas de terra, praça de pedras, canteiros arados, areia, rocha e neve), com:
   - **fazenda** a sudoeste, cercada, com estufa de vidro, celeiro, galinheiro, galpão, colmeias, poço, espantalho, pomar, lago e 5 plantações;
   - **vila** no centro: praça com chafariz, Centro Comunitário com torre do relógio (os ponteiros seguem a hora), Mercado, Taverna, Clínica, Ferreiro, bancos e lampiões;

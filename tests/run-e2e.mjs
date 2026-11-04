@@ -558,10 +558,10 @@ console.log(`\nPORTAL e2e — serving dist at ${ORIGIN}${BASE}\n`);
   });
   await test('duda: colheita das cinco plantações → descoberta', async () => {
     await page.evaluate(() => window.__portal.discoveries.reset());
-    await look([-0.5, 1.75, 1.05], [-0.5, 1.07, 0.27]);
+    await look([-0.48, 1.55, 0.75], [-0.48, 1.07, 0.1]);
     await page.waitForTimeout(300);
     for (const k of ['tomato', 'pumpkin', 'blueberry', 'cauli', 'strawberry']) {
-      if (k === 'strawberry') await look([-0.79, 1.6, 1.3], [-0.79, 1.07, 0.7]);
+      if (k === 'strawberry') await look([-0.245, 1.5, 0.7], [-0.245, 1.07, 0.165]);
       const hit = await tapObject(page, `${W}.proxies['field:${k}']`);
       assert(hit === `field:${k}`, `field ${k}: ${hit}`);
     }
@@ -570,16 +570,16 @@ console.log(`\nPORTAL e2e — serving dist at ${ORIGIN}${BASE}\n`);
     assert(g < 0.2, 'fields regrowing ' + g);
   });
   await test('duda: Biscoito, galinhas (ovo dourado) e colmeias (mel)', async () => {
-    await look([-0.9, 1.45, 0.7], [-0.9, 1.07, 0.15]);
+    await look([-0.5, 1.4, 0.15], [-0.5, 1.07, -0.3]);
     await page.waitForTimeout(300);
     assert((await tapObject(page, `${W}.proxies.dog`)) === 'dog', 'dog');
     assert(await page.evaluate(() => window.__portal.stage.world.dogAwake), 'dog awake');
-    await look([-0.31, 1.45, 1.3], [-0.31, 1.07, 0.77]);
+    await look([-0.185, 1.4, 0.45], [-0.185, 1.07, 0.02]);
     await page.waitForTimeout(300);
     for (let i = 0; i < 3; i++) assert((await tapObject(page, `${W}.proxies.chickens`)) === 'chickens', 'chickens');
     assert(await page.evaluate(() => window.__portal.stage.world.eggVisible), 'golden egg');
     assert((await tapObject(page, `${W}.proxies.egg`)) === 'egg', 'egg tap');
-    await look([-0.8, 1.45, 0.55], [-0.8, 1.07, 0.0]);
+    await look([-0.61, 1.4, 0.3], [-0.61, 1.07, -0.14]);
     await page.waitForTimeout(300);
     for (let i = 0; i < 3; i++) assert((await tapObject(page, `${W}.proxies.hives`)) === 'hives', 'hives');
     const d = await page.evaluate(() => ['duda-biscoito', 'duda-ovo', 'duda-mel'].map((id) => window.__portal.discoveries.has(id)));
@@ -588,11 +588,11 @@ console.log(`\nPORTAL e2e — serving dist at ${ORIGIN}${BASE}\n`);
   await test('duda: noite → Flor da Lua na estufa; casa adianta o tempo', async () => {
     await page.evaluate(() => (window.__portal.stage.world.timeOfDay = 0.97));
     await page.waitForTimeout(300);
-    await look([-1.06, 1.5, 0.62], [-1.06, 1.1, 0.06]);
+    await look([-0.61, 1.45, 0.15], [-0.61, 1.1, -0.28]);
     await page.waitForTimeout(300);
     assert((await tapObject(page, `${W}.proxies.greenhouse`)) === 'greenhouse', 'greenhouse');
     assert(await page.evaluate(() => window.__portal.discoveries.has('duda-lua')), 'moon flower');
-    await look([-1.0, 1.55, 1.05], [-1.0, 1.12, 0.42]);
+    await look([-0.3, 1.5, 0.25], [-0.3, 1.12, -0.24]);
     await page.waitForTimeout(300);
     const t0 = await page.evaluate(() => window.__portal.stage.world.timeOfDay);
     assert((await tapObject(page, `${W}.proxies.house`)) === 'house', 'house');
@@ -602,7 +602,7 @@ console.log(`\nPORTAL e2e — serving dist at ${ORIGIN}${BASE}\n`);
     await page.waitForTimeout(450);
   });
   await test('duda: pesca no lago + painel de descobertas', async () => {
-    await look([-0.56, 1.5, 1.35], [-0.56, 1.05, 0.8]);
+    await look([-0.46, 1.45, 0.25], [-0.46, 1.05, -0.18]);
     await page.waitForTimeout(300);
     { const hit = await tapObject(page, `${W}.proxies.pond`); assert(hit === 'pond', 'pond tap hit: ' + hit); }
     await page.waitForFunction(() => /Fisgou|Arco/.test(document.querySelector('.hint')?.textContent + document.querySelector('.card')?.textContent), null, { timeout: 30000 });
@@ -612,10 +612,10 @@ console.log(`\nPORTAL e2e — serving dist at ${ORIGIN}${BASE}\n`);
     await page.click('.panel-close');
   });
   await test('duda: vila — prédio, fonte e moradores', async () => {
-    await look([0.22, 1.6, 0.75], [0.22, 1.08, 0.04]);
+    await look([0.304, 1.5, 0.5], [0.304, 1.08, 0.0]);
     await page.waitForTimeout(300);
     assert((await tapObject(page, `${W}.proxies.fountain`)) === 'fountain', 'fountain');
-    await look([0.22, 1.55, 0.3], [0.22, 1.12, -0.3]);
+    await look([0.34, 1.45, 0.2], [0.34, 1.12, -0.2]);
     await page.waitForTimeout(300);
     assert((await tapObject(page, `${W}.proxies.center`)) === 'center', 'community center');
     await page.waitForSelector('.card.on');
