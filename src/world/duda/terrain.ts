@@ -3,7 +3,7 @@ import { Noise } from '../../utils/noise';
 import { clamp, distToPolyline, lerp, mulberry32, smoothstep } from '../../utils/math';
 import { rockTexture, toTexture } from './paint';
 import {
-  BEACH, COAST, DESERT, DESERT_ROAD, FARM, FIELDS, FOREST_EAST, FOREST_NORTH, FOREST_POND, FOREST_SOUTH, FOREST_WEST, HOUSE, ISLAND, LAKE, MOUNTAINS, ORCHARD, PATHS, PEN, PLAZA, POND,
+  BEACH, COAST, DESERT, DESERT_ROAD, FARM, FIELDS, FOREST_EAST, FOREST_NORTH, FOREST_PONDS, FOREST_SOUTH, FOREST_TRAILS, FOREST_WEST, TERRACE, HOUSE, ISLAND, LAKE, MOUNTAINS, ORCHARD, PATHS, PEN, PLAZA, POND,
   RIVERS, SEA_Y, WATERFALL, inRect, type P2,
 } from './layout';
 
@@ -46,6 +46,8 @@ export function heightAt(x: number, z: number) {
     const d2 = ((x - m.x) ** 2 + (z - m.z) ** 2) / (m.r * m.r);
     h += m.h * Math.exp(-d2 * 2.1) * (0.85 + 0.15 * noise.noise2(x * 9, z * 9));
   }
+  // rocky ledge north of the farm and the forest: a steep step with flat top
+  h += TERRACE.h * smoothstep(TERRACE.z + 0.012, TERRACE.z - 0.012, z) * smoothstep(TERRACE.x1 + 0.05, TERRACE.x1 - 0.05, x);
   // desert dunes
   if (inRect(x, z, DESERT, 0.05)) h += 0.012 * (0.5 + 0.5 * Math.sin(x * 18 + Math.sin(z * 9) * 2));
   // mountain lake on a plateau, the waterfall drops through a notch to the river
@@ -57,7 +59,7 @@ export function heightAt(x: number, z: number) {
   const r = nearestRiver(x, z);
   h = lerp(h, Math.min(h, lerp(r.top, r.bottom, r.t) - 0.035), smoothstep(r.w * 1.7, r.w * 0.75, r.d));
   // ponds
-  for (const p of [POND, FOREST_POND]) {
+  for (const p of [POND, ...FOREST_PONDS]) {
     const dp = Math.hypot(x - p.x, z - p.z);
     if (dp < p.r + 0.02) h = Math.min(h, -0.048 * smoothstep(p.r + 0.02, p.r * 0.5, dp));
   }
@@ -99,7 +101,7 @@ export function buildTerrain(detail: number, waterMat: THREE.Material, fallMat: 
     seaMesh(waterMat),
     ...RIVERS.map((r, i) => riverMesh(waterMat, r.pts, r.w, r.top, r.bottom, `rio-${i}`)),
     diskMesh(POND.x, POND.z, POND.r, -0.017, waterMat, 'lago-fazenda'),
-    diskMesh(FOREST_POND.x, FOREST_POND.z, FOREST_POND.r, -0.017, waterMat, 'lago-floresta'),
+    ...FOREST_PONDS.map((p, i) => diskMesh(p.x, p.z, p.r, -0.017, waterMat, `lago-floresta-${i}`)),
     diskMesh(LAKE.x, LAKE.z, LAKE.r + 0.01, LAKE.y - 0.008, waterMat, 'lago-montanha'),
   ];
   const fall = waterfallMesh(fallMat);
@@ -294,11 +296,11 @@ function waterfallMesh(mat: THREE.Material) {
 }
 
 // ------------------------------------------------------------------ the painted ground map
-type Kind = 'grass' | 'meadow' | 'forest' | 'rock' | 'snow' | 'sand' | 'desert' | 'bed';
+type Kind = 'grass' | 'meadow' | 'forest' | 'rock' | 'snow' | 'sand' | 'desert' | 'yard' | 'bed';
 
 function classify(x: number, z: number, h: number, slope: number): Kind {
   const r = nearestRiver(x, z);
-  const water = seaFactor(x, z) > 0.4 || r.d < r.w * 1.05 || Math.hypot(x - POND.x, z - POND.z) < POND.r || Math.hypot(x - FOREST_POND.x, z - FOREST_POND.z) < FOREST_POND.r || Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r;
+  const water = seaFactor(x, z) > 0.4 || r.d < r.w * 1.05 || Math.hypot(x - POND.x, z - POND.z) < POND.r || FOREST_PONDS.some((p) => Math.hypot(x - p.x, z - p.z) < p.r) || Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r;
   if (water) return 'bed';
   if (h > 0.3) return 'snow';
   if (h > 0.1 || slope > 1.4) return 'rock';
@@ -306,7 +308,12 @@ function classify(x: number, z: number, h: number, slope: number): Kind {
   const toCoast = coastZ(x) - z;
   if (toCoast < 0.05 || (x > BEACH[0] && x < BEACH[1] && toCoast < 0.13)) return 'sand';
   if (inRect(x, z, FOREST_WEST) || inRect(x, z, FOREST_SOUTH) || inRect(x, z, FOREST_EAST) || inRect(x, z, FOREST_NORTH)) return 'forest';
-  if (inRect(x, z, FARM)) return 'meadow';
+  if (inRect(x, z, FARM)) {
+    const border = Math.min(x - FARM[0], FARM[1] - x, z - FARM[2], FARM[3] - z);
+    return border > 0.03 + 0.03 * noise.noise2(x * 14, z * 14) ? 'yard' : 'meadow';
+  }
+  // sandy rims around the forest ponds
+  if (FOREST_PONDS.some((p) => Math.hypot(x - p.x, z - p.z) < p.r + 0.025 + 0.01 * noise.noise2(x * 30, z * 30))) return 'yard';
   return 'grass';
 }
 
@@ -338,6 +345,7 @@ function paintGroundMap(size: number) {
     snow: [new THREE.Color('#e8eef6'), new THREE.Color('#ffffff')],
     sand: [new THREE.Color('#e3c98c'), new THREE.Color('#f0dca6')],
     desert: [new THREE.Color('#e8b85e'), new THREE.Color('#f2cf7c')],
+    yard: [new THREE.Color('#d9a04a'), new THREE.Color('#e8b45c')],
     bed: [new THREE.Color('#5d7f6a'), new THREE.Color('#7a9a7a')],
   };
   const tmp = new THREE.Color();
@@ -390,7 +398,7 @@ function paintGroundMap(size: number) {
     const k = kindAt(px, py);
     if (k === 'bed' || k === 'snow') continue;
     const pal =
-      k === 'sand' || k === 'desert' ? ['#f6e6b8', '#d9a95a'] : k === 'rock' ? ['#b5a28a', '#6e5e50', '#8a7a6a'] : k === 'forest' ? ['#2f6a2c', '#4f8f3a', '#6aa84a'] : ['#4f9a3a', '#8fcf5a', '#a7d96a', '#5fa543'];
+      k === 'sand' || k === 'desert' ? ['#f6e6b8', '#d9a95a'] : k === 'yard' ? ['#f0c272', '#c98a3a', '#e8b45c'] : k === 'rock' ? ['#b5a28a', '#6e5e50', '#8a7a6a'] : k === 'forest' ? ['#2f6a2c', '#4f8f3a', '#6aa84a'] : ['#4f9a3a', '#8fcf5a', '#a7d96a', '#5fa543'];
     ctx.globalAlpha = 0.3 + rng() * 0.3;
     ctx.strokeStyle = pal[Math.floor(rng() * pal.length)];
     ctx.lineWidth = 1 + rng() * 2.2;
@@ -445,6 +453,8 @@ function paintGroundMap(size: number) {
     });
     ctx.stroke();
   };
+  for (const t of FOREST_TRAILS) drawPath(t, 0.07, '#c9913f');
+  for (const t of FOREST_TRAILS) drawPath(t, 0.05, '#e2ae58');
   drawPath(DESERT_ROAD, 0.05, '#6e6a64');
   drawPath(DESERT_ROAD, 0.04, '#8c877e');
   for (const p of PATHS) drawPath(p, 0.062, '#a9814f');

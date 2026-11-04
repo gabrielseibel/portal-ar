@@ -532,12 +532,13 @@ console.log(`\nPORTAL e2e — serving dist at ${ORIGIN}${BASE}\n`);
       const w = window.__portal.stage.world;
       const names = [];
       w.group.traverse((o) => o.isMesh && names.push(o.name));
-      return { kind: window.__portal.stage.kind, err: w.loadError, trees: w.trees.length, farm: names.includes('vale-terreno'), house: !!w.group.getObjectByName('casa-da-duda'), homes: w.group.children.filter((o) => o.name === 'casa-vila').length };
+      return { kind: window.__portal.stage.kind, err: w.loadError, trees: w.trees.length, farm: names.includes('vale-terreno'), house: !!w.group.getObjectByName('casa-da-duda'), farmhouses: w.group.children.filter((o) => o.name.startsWith('casa-')).length, homes: Object.keys(w.proxies).filter((k) => k.startsWith('home')).length };
     });
     assert(info.kind === 'duda', 'world kind');
     assert(!info.err, 'load error: ' + info.err);
     assert(info.farm && info.house, 'painted valley + farmhouse GLB in the scene');
-    assert(info.homes >= 3, 'town homes (copies of the farmhouse) ' + info.homes);
+    assert(info.farmhouses === 1, 'the farmhouse model appears exactly once: ' + info.farmhouses);
+    assert(info.homes >= 3, 'town cottages ' + info.homes);
     assert(info.trees > 30, 'trees ' + info.trees);
     await page.evaluate(() => {
       const p = window.__portal;
@@ -602,7 +603,7 @@ console.log(`\nPORTAL e2e — serving dist at ${ORIGIN}${BASE}\n`);
     await page.waitForTimeout(450);
   });
   await test('duda: pesca no lago + painel de descobertas', async () => {
-    await look([-0.46, 1.45, 0.25], [-0.46, 1.05, -0.18]);
+    await look([-0.655, 1.45, 0.62], [-0.655, 1.05, 0.17]);
     await page.waitForTimeout(300);
     { const hit = await tapObject(page, `${W}.proxies.pond`); assert(hit === 'pond', 'pond tap hit: ' + hit); }
     await page.waitForFunction(() => /Fisgou|Arco/.test(document.querySelector('.hint')?.textContent + document.querySelector('.card')?.textContent), null, { timeout: 30000 });

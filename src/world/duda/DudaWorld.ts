@@ -10,10 +10,11 @@ import { clamp, damp, dampAngle, distToPolyline, mulberry32, range, smoothstep }
 const BAY: P2 = [0.72, 0.9];
 import { buildTerrain, coastZ, edgeFactor, heightAt, nearestRiver } from './terrain';
 import {
-  Batcher, PaintedPerson, blob, characterMaterial, buildTrees, cone, createMats, cropGeometry, greenhouse, building, localMatrix, scatter, sphere, townBuilding, type Mats, type TreeSpot,
+  Batcher, PaintedPerson, blob, characterMaterial, cottage, footbridge, buildTrees, cone, createMats, cropGeometry, greenhouse, building, localMatrix, scatter, sphere, townBuilding, type Mats, type TreeSpot,
 } from './kit';
 import {
-  BARN, BRIDGES, CLOVER, COAST, COOP, DESERT, DOG_BED, FARM, FARM_GATE, FIELDS, FOREST_EAST, FOREST_NORTH, FOREST_POND, FOREST_SOUTH, FOREST_WEST, GREENHOUSE, HIVES, HOUSE, LAKE,
+  BARN, BRIDGES, CABIN, CLOVER, COAST, COOP, DESERT, DOG_BED, FARM, FARM_GATE, FARM_TREES, FIELDS, FOREST_EAST, FOREST_NORTH, FOREST_POND, FOREST_PONDS, FOREST_SOUTH, FOREST_WEST,
+  GREENHOUSE, HIVES, HOUSE, KEG, LAKE, STUMPS, WELL,
   MAILBOX, MINE, MOUNTAINS, ORCHARD, PATHS, PEN, PIERS, PLAZA, POND, ROUTE, SCARECROW, SEA_Y, SHED, TOWN_BUILDINGS, TOWN_HOMES, WALKERS, WATERFALL, inRect, rectCenter,
   type FieldKind, type P2, type Rect,
 } from './layout';
@@ -255,18 +256,6 @@ export class DudaWorld {
       this.houseSmoke = new ChimneySmoke([top.add(new THREE.Vector3(0, 0.004, 0))], Math.max(4, Math.round(10 * this.quality.particles)));
       this.group.add(this.houseSmoke.points);
     }
-    // town homes: the same model with re-tinted roofs
-    for (const h of TOWN_HOMES) {
-      const copy = proto.clone(true);
-      copy.name = 'casa-vila';
-      copy.traverse((o) => {
-        const m = o as THREE.Mesh;
-        if (!m.isMesh) return;
-        const mat = m.material as THREE.MeshStandardMaterial;
-        if (mat.name === 'Farmhouse_2') m.material = hueShifted(mat, h.roof);
-      });
-      place(copy, h.x, h.z, h.rot);
-    }
   }
 
   // ================================================================== build: farm
@@ -282,12 +271,24 @@ export class DudaWorld {
     b.at(SHED.x, gy(SHED.x, SHED.z), SHED.z, Math.PI / 2);
     const c = building(b, { w: SHED.w, d: SHED.d, h: 0.055, wall: m.wall.wood, roof: m.roof('#8e3b46'), mats: m, windows: 1, chimney: true });
     if (c) chimneys.push(c.applyMatrix4(b.frame));
-    // beehives
-    for (let i = 0; i < 3; i++) {
-      b.at(HIVES.x - 0.05 + i * 0.05, gy(HIVES.x, HIVES.z), HIVES.z);
-      b.box(0, 0, 0, 0.026, 0.006, 0.026, m.darkWood);
-      b.box(0, 0.006, 0, 0.022, 0.026, 0.022, m.wall.wood);
-      b.box(0, 0.032, 0, 0.028, 0.006, 0.028, m.roof('#c9874a'));
+    // a row of beehives on a short fence, front-left of the house
+    for (let i = 0; i < 5; i++) {
+      const x = HIVES.x - 0.05 + i * 0.025;
+      b.at(x, gy(x, HIVES.z), HIVES.z);
+      b.box(0, 0, 0, 0.02, 0.005, 0.02, m.darkWood);
+      b.box(0, 0.005, 0, 0.017, 0.022, 0.017, m.wall.wood);
+      b.box(0, 0.027, 0, 0.022, 0.005, 0.022, m.roof('#c9874a'));
+      b.box(0, 0.008, 0.0087, 0.008, 0.003, 0.001, m.darkWood);
+    }
+    // keg and chest beside the house
+    b.at(KEG.x, gy(KEG.x, KEG.z), KEG.z);
+    b.add(new THREE.CylinderGeometry(0.008, 0.009, 0.02, 12), m.wood, localMatrix(0, 0.01, 0));
+    b.box(0.016, 0, 0.004, 0.02, 0.012, 0.014, m.wall.wood);
+    b.box(0.016, 0.012, 0.004, 0.021, 0.003, 0.015, m.darkWood);
+    // tree stumps
+    for (const [x, z] of STUMPS) {
+      b.at(x, gy(x, z), z);
+      b.add(new THREE.CylinderGeometry(0.01, 0.013, 0.012, 9), m.darkWood, localMatrix(0, 0.006, 0));
     }
     // fences around the farm (gate on the east side) and around the chicken pen
     this.fence(b, [
@@ -312,11 +313,14 @@ export class DudaWorld {
     b.at(MAILBOX.x, gy(MAILBOX.x, MAILBOX.z), MAILBOX.z);
     b.box(0, 0, 0, 0.005, 0.03, 0.005, m.darkWood);
     b.box(0, 0.03, 0, 0.014, 0.012, 0.022, m.wall.blue);
-    b.at(-0.9, gy(-0.9, 0.38), 0.38);
-    b.add(new THREE.CylinderGeometry(0.022, 0.024, 0.026, 14, 1, true), m.stone, localMatrix(0, 0.013, 0));
-    b.box(-0.02, 0, 0, 0.004, 0.05, 0.004, m.darkWood);
-    b.box(0.02, 0, 0, 0.004, 0.05, 0.004, m.darkWood);
-    b.add(new THREE.ConeGeometry(0.034, 0.02, 4).rotateY(Math.PI / 4), m.roof('#8e3b46'), localMatrix(0, 0.06, 0));
+    // stone well with a little roof
+    b.at(WELL.x, gy(WELL.x, WELL.z), WELL.z);
+    b.add(new THREE.CylinderGeometry(0.019, 0.021, 0.022, 14, 1, true), m.stone, localMatrix(0, 0.011, 0));
+    b.add(new THREE.CircleGeometry(0.017, 14).rotateX(-Math.PI / 2), this.waterMat, localMatrix(0, 0.014, 0));
+    b.box(-0.018, 0, 0, 0.004, 0.05, 0.004, m.darkWood);
+    b.box(0.018, 0, 0, 0.004, 0.05, 0.004, m.darkWood);
+    b.box(0, 0.032, 0, 0.04, 0.003, 0.003, m.darkWood);
+    b.add(new THREE.ConeGeometry(0.032, 0.022, 4).rotateY(Math.PI / 4), m.roof('#7a4a2e'), localMatrix(0, 0.06, 0));
     b.at(SCARECROW.x, gy(SCARECROW.x, SCARECROW.z), SCARECROW.z);
     b.box(0, 0, 0, 0.004, 0.06, 0.004, m.darkWood);
     b.box(0, 0.042, 0, 0.04, 0.004, 0.004, m.darkWood);
@@ -408,13 +412,18 @@ export class DudaWorld {
     }
     // bridges, pier, boats, mine entrance, barrels by the tavern
     for (const [x, z, yaw] of BRIDGES) {
-      b.at(x, -0.004, z, yaw);
-      b.add(new THREE.CylinderGeometry(0.16, 0.16, 0.05, 20, 1, false, -0.36, 0.72).rotateZ(Math.PI / 2).translate(0, -0.15, 0), m.wood);
-      for (const s of [-1, 1]) {
-        b.box(s * 0.028, 0.015, 0, 0.004, 0.004, 0.15, m.darkWood);
-        for (const zz of [-0.06, 0, 0.06]) b.box(s * 0.028, 0, zz, 0.004, 0.02, 0.004, m.darkWood);
-      }
+      b.at(x, 0.0, z, yaw);
+      footbridge(b, m, 0.16, 0.05);
     }
+    for (const c of TOWN_HOMES) {
+      b.at(c.x, gy(c.x, c.z), c.z, c.rot);
+      const top = cottage(b, m, { w: c.w, d: c.d, h: c.h, wall: m.wall[c.wall], roof: m.roof(c.roof), trim: m.paint(c.trim) });
+      if (top) chimneys.push(top.applyMatrix4(b.frame));
+    }
+    b.at(CABIN.x, gy(CABIN.x, CABIN.z), CABIN.z, 0.4);
+    const cabinTop = building(b, { w: 0.09, d: 0.07, h: 0.05, wall: m.darkWood, roof: m.roof('#8a5a30'), mats: m, windows: 1, chimney: true });
+    if (cabinTop) chimneys.push(cabinTop.applyMatrix4(b.frame));
+    b.box(0.065, 0, 0, 0.03, 0.03, 0.05, m.wood);
     for (const [[px0, pz0], [px1, pz1]] of PIERS) {
       const pierYaw = Math.atan2(px1 - px0, pz1 - pz0);
       const pierLen = Math.hypot(px1 - px0, pz1 - pz0);
@@ -472,12 +481,13 @@ export class DudaWorld {
     if (inRect(x, z, DESERT, 0.02)) return true;
     if (Math.hypot(x - PLAZA.x, z - PLAZA.z) < PLAZA.r + margin + 0.02) return true;
     for (const s of TOWN_BUILDINGS) if (Math.abs(x - s.x) < s.w / 2 + margin + 0.03 && Math.abs(z - s.z) < s.w / 2 + margin + 0.03) return true;
-    for (const h of TOWN_HOMES) if (Math.hypot(x - h.x, z - h.z) < 0.14 + margin) return true;
+    for (const h of TOWN_HOMES) if (Math.hypot(x - h.x, z - h.z) < 0.12 + margin) return true;
     for (const p of PATHS) if (distToPolyline(x, z, p).d < 0.035 + margin) return true;
     const r = nearestRiver(x, z);
     if (r.d < r.w * 1.8 + margin) return true;
     if (coastZ(x) - z < 0.06 + margin) return true;
-    for (const p of [POND, FOREST_POND]) if (Math.hypot(x - p.x, z - p.z) < p.r + 0.03) return true;
+    for (const p of [POND, ...FOREST_PONDS]) if (Math.hypot(x - p.x, z - p.z) < p.r + 0.035) return true;
+    if (Math.hypot(x - CABIN.x, z - CABIN.z) < 0.1) return true;
     if (Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r + 0.05) return true;
     if (Math.abs(x - WATERFALL.x) < 0.07 && z > WATERFALL.top - 0.05 && z < WATERFALL.bottom + 0.06) return true;
     if (Math.hypot(x - MINE.x, z - MINE.z) < 0.08) return true;
@@ -495,10 +505,7 @@ export class DudaWorld {
       return true;
     };
     // farm orchard (rows)
-    const [ox0, ox1, oz0, oz1] = ORCHARD;
-    const kinds: TreeSpot['kind'][] = ['apple', 'orange', 'blossom', 'apple', 'autumn', 'orange', 'blossom', 'apple', 'orange'];
-    let k = 0;
-    for (let z = oz0 + 0.04; z < oz1; z += 0.1) for (let x = ox0 + 0.04; x < ox1; x += 0.1) spots.push({ x, y: heightAt(x, z), z, s: 0.95, kind: kinds[k++ % kinds.length] });
+    for (const [x, z, kind] of FARM_TREES) spots.push({ x, y: heightAt(x, z), z, s: 0.9, kind });
     // forests: the big one in the west, plus south, north and east woods (like the map)
     const forests: Array<[Rect, number, number]> = [
       [FOREST_WEST, 1.6, 0.4],
@@ -833,7 +840,8 @@ export class DudaWorld {
       this.proxy(`field:${k}`, at(x, z, 0.015), 0, 0, [f[1] - f[0], 0.04, f[3] - f[2]]);
     }
     for (const s of TOWN_BUILDINGS) this.proxy(s.id, at(s.x, s.z, s.h * 0.7), 0, 0, [s.w, s.h * 1.5, s.d], s.rot);
-    TOWN_HOMES.forEach((h, i) => this.proxy(`home${i}`, at(h.x, h.z, 0.08), 0, 0, [hw, 0.18, HOUSE.depth], h.rot));
+    TOWN_HOMES.forEach((h, i) => this.proxy(`home${i}`, at(h.x, h.z, h.h * 0.7), 0, 0, [h.w, h.h * 1.6, h.d + 0.04], h.rot));
+    this.proxy('cabin', at(CABIN.x, CABIN.z, 0.04), 0.07, 0.09);
     this.proxy('fountain', at(PLAZA.x, PLAZA.z, 0.03), 0.065, 0.06);
     const [[ax, az], [bx, bz]] = PIERS[0];
     this.proxy('pier', new THREE.Vector3((ax + bx) / 2, SEA_Y + 0.02, (az + bz) / 2), 0, 0, [0.06, 0.04, Math.hypot(bx - ax, bz - az)], Math.atan2(bx - ax, bz - az));
@@ -1222,32 +1230,6 @@ export class DudaWorld {
 }
 
 // ------------------------------------------------------------------ materials
-/** Roof recoloured by rotating its hue toward `hex` (keeps the painted detail of the texture). */
-function hueShifted(src: THREE.MeshStandardMaterial, hex: string) {
-  const mat = src.clone();
-  const target = new THREE.Color(hex);
-  const hsl = { h: 0, s: 0, l: 0 };
-  target.getHSL(hsl);
-  const shift = hsl.h * Math.PI * 2 - 0.05 * Math.PI * 2; // the roof texture is red-orange (≈ 0.03)
-  mat.onBeforeCompile = (sh) => {
-    sh.uniforms.uHue = { value: shift };
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uHue;').replace(
-      '#include <map_fragment>',
-      `#include <map_fragment>
-      {
-        const mat3 toYIQ = mat3(0.299, 0.596, 0.211, 0.587, -0.274, -0.523, 0.114, -0.322, 0.312);
-        const mat3 toRGB = mat3(1.0, 1.0, 1.0, 0.956, -0.272, -1.106, 0.621, -0.647, 1.703);
-        vec3 yiq = toYIQ * diffuseColor.rgb;
-        float c = cos(uHue), s = sin(uHue);
-        yiq.yz = mat2(c, -s, s, c) * yiq.yz;
-        diffuseColor.rgb = max(toRGB * yiq, 0.0);
-      }`,
-    );
-  };
-  mat.customProgramCacheKey = () => `hue-${hex}`;
-  return mat;
-}
-
 function waterMaterial() {
   return new THREE.ShaderMaterial({
     transparent: true,
