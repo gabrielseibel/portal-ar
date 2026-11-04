@@ -1,16 +1,21 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { QualitySettings } from '../../systems/Quality';
 import { shared } from '../../systems/SharedUniforms';
 import { ChimneySmoke, Fireflies } from '../../effects/Ambient';
 import { glowTexture } from '../../utils/textures';
 import { clamp, damp, dampAngle, distToPolyline, mulberry32, range, smoothstep } from '../../utils/math';
-import { buildTerrain, edgeFactor, heightAt } from './terrain';
+
+/** A spot in the bay, in front of the beach. */
+const BAY: P2 = [0.72, 0.9];
+import { buildTerrain, coastZ, edgeFactor, heightAt, nearestRiver } from './terrain';
 import {
   Batcher, PaintedPerson, blob, characterMaterial, buildTrees, cone, createMats, cropGeometry, greenhouse, building, localMatrix, scatter, sphere, townBuilding, type Mats, type TreeSpot,
 } from './kit';
 import {
-  BARN, BRIDGES, CLOVER, COOP, DOG_BED, FARM, FARM_GATE, FIELDS, FOREST, GREENHOUSE, HIVES, HOUSE, LAKE, MAILBOX, MINE, MOUNTAINS, ORCHARD, PATHS, PEN, PIER, PLAZA, POND, RIVER,
-  RIVER_W, ROUTE, SCARECROW, SEA, SEA_Y, SHED, TOWN_BUILDINGS, TOWN_HOMES, WALKERS, WATERFALL, inRect, rectCenter, type FieldKind, type P2,
+  BARN, BRIDGES, CLOVER, COAST, COOP, DESERT, DOG_BED, FARM, FARM_GATE, FIELDS, FOREST_EAST, FOREST_NORTH, FOREST_POND, FOREST_SOUTH, FOREST_WEST, GREENHOUSE, HIVES, HOUSE, LAKE,
+  MAILBOX, MINE, MOUNTAINS, ORCHARD, PATHS, PEN, PIERS, PLAZA, POND, ROUTE, SCARECROW, SEA_Y, SHED, TOWN_BUILDINGS, TOWN_HOMES, WALKERS, WATERFALL, inRect, rectCenter,
+  type FieldKind, type P2, type Rect,
 } from './layout';
 
 const DAY_LENGTH = 240; // seconds for a full day
@@ -194,10 +199,11 @@ export class DudaWorld {
     // fireflies over the pond, the orchard, the forest edge and the lake
     const ff: THREE.Vector3[] = [];
     const zones: Array<[number, number, number]> = [
-      [POND.x, POND.z, 0.12],
-      [-1.07, 0.8, 0.15],
-      [-0.7, -0.35, 0.25],
-      [0.75, 0.3, 0.15],
+      [POND.x, POND.z, 0.1],
+      [FOREST_POND.x, FOREST_POND.z, 0.15],
+      [-1.1, 0.3, 0.3],
+      [0.3, 0.36, 0.2],
+      [-0.4, 0.6, 0.2],
     ];
     for (let i = 0; i < Math.round(70 * q.particles); i++) {
       const [x, z, r] = zones[i % zones.length];
@@ -209,7 +215,7 @@ export class DudaWorld {
     this.group.add(this.fireflies.points);
 
     this.buildProxies();
-    this.sounds.push(new THREE.Vector3(WATERFALL.x, 0.1, WATERFALL.bottom), new THREE.Vector3(SEA.x - 0.25, 0, SEA.z - 0.15), new THREE.Vector3(PLAZA.x, 0.05, PLAZA.z));
+    this.sounds.push(new THREE.Vector3(WATERFALL.x, 0.1, WATERFALL.bottom), new THREE.Vector3(BAY[0], 0, BAY[1]), new THREE.Vector3(PLAZA.x, 0.05, PLAZA.z));
 
     this.ready = this.load(import.meta.env.BASE_URL).catch((e) => {
       this.loadError = String(e);
@@ -220,7 +226,7 @@ export class DudaWorld {
   // ================================================================== the user's farmhouse (+ town copies)
   private async load(base: string) {
     const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js');
-    const gltf = await new GLTFLoader().loadAsync(`${base}models/fazenda-da-duda/casa.glb`);
+    const gltf = await new GLTFLoader().loadAsync(`${base}models/fazenda-da-duda/casa-nivelada.glb`);
     const proto = gltf.scene;
     const place = (obj: THREE.Object3D, x: number, z: number, rot: number) => {
       obj.scale.setScalar(HOUSE.depth);
@@ -409,15 +415,16 @@ export class DudaWorld {
         for (const zz of [-0.06, 0, 0.06]) b.box(s * 0.028, 0, zz, 0.004, 0.02, 0.004, m.darkWood);
       }
     }
-    const [[px0, pz0], [px1, pz1]] = PIER;
-    const pierYaw = Math.atan2(px1 - px0, pz1 - pz0);
-    const pierLen = Math.hypot(px1 - px0, pz1 - pz0);
-    b.at(px0, SEA_Y + 0.012, pz0, pierYaw);
-    b.box(0, 0, pierLen / 2, 0.05, 0.006, pierLen, m.wood);
-    for (let k = 0; k <= 4; k++) for (const s of [-1, 1]) b.box(s * 0.022, -0.04, (pierLen * k) / 4, 0.006, 0.05, 0.006, m.darkWood);
+    for (const [[px0, pz0], [px1, pz1]] of PIERS) {
+      const pierYaw = Math.atan2(px1 - px0, pz1 - pz0);
+      const pierLen = Math.hypot(px1 - px0, pz1 - pz0);
+      b.at(px0, SEA_Y + 0.012, pz0, pierYaw);
+      b.box(0, 0, pierLen / 2, 0.045, 0.006, pierLen, m.wood);
+      for (let k = 0; k <= 4; k++) for (const s of [-1, 1]) b.box(s * 0.02, -0.04, (pierLen * k) / 4, 0.006, 0.05, 0.006, m.darkWood);
+    }
     for (const [x, z, yaw, col] of [
-      [0.84, 0.94, 0.4, '#d9534f'],
-      [0.98, 0.8, -0.8, '#4f8fd8'],
+      [PIERS[0][1][0] + 0.06, PIERS[0][1][1] - 0.04, 0.4, '#d9534f'],
+      [PIERS[1][1][0] - 0.06, PIERS[1][1][1] - 0.02, -0.8, '#4f8fd8'],
     ] as Array<[number, number, number, string]>) {
       b.at(x, SEA_Y + 0.002, z, yaw);
       b.add(new THREE.SphereGeometry(0.03, 12, 6, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2).scale(0.55, 0.45, 1.25), m.roof(col));
@@ -460,18 +467,22 @@ export class DudaWorld {
 
   // ================================================================== nature
   private blocked(x: number, z: number, margin: number) {
-    if (edgeFactor(x, z) > 0.94) return true;
-    if (inRect(x, z, FARM, -0.0) && !inRect(x, z, ORCHARD)) return true;
+    if (edgeFactor(x, z) > 0.95) return true;
+    if (inRect(x, z, FARM, 0.01) && !inRect(x, z, ORCHARD)) return true;
+    if (inRect(x, z, DESERT, 0.02)) return true;
     if (Math.hypot(x - PLAZA.x, z - PLAZA.z) < PLAZA.r + margin + 0.02) return true;
     for (const s of TOWN_BUILDINGS) if (Math.abs(x - s.x) < s.w / 2 + margin + 0.03 && Math.abs(z - s.z) < s.w / 2 + margin + 0.03) return true;
-    for (const h of TOWN_HOMES) if (Math.hypot(x - h.x, z - h.z) < 0.17 + margin) return true;
-    for (const p of PATHS) if (distToPolyline(x, z, p).d < 0.04 + margin) return true;
-    if (distToPolyline(x, z, RIVER).d < RIVER_W * 1.8 + margin) return true;
-    if (Math.hypot((x - SEA.x) * 0.9, z - SEA.z) < SEA.r + 0.02) return true;
+    for (const h of TOWN_HOMES) if (Math.hypot(x - h.x, z - h.z) < 0.14 + margin) return true;
+    for (const p of PATHS) if (distToPolyline(x, z, p).d < 0.035 + margin) return true;
+    const r = nearestRiver(x, z);
+    if (r.d < r.w * 1.8 + margin) return true;
+    if (coastZ(x) - z < 0.06 + margin) return true;
+    for (const p of [POND, FOREST_POND]) if (Math.hypot(x - p.x, z - p.z) < p.r + 0.03) return true;
     if (Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r + 0.05) return true;
     if (Math.abs(x - WATERFALL.x) < 0.07 && z > WATERFALL.top - 0.05 && z < WATERFALL.bottom + 0.06) return true;
     if (Math.hypot(x - MINE.x, z - MINE.z) < 0.08) return true;
-    if (heightAt(x, z) > 0.33) return true;
+    for (const [[ax, az], [bx, bz]] of PIERS) if (distToPolyline(x, z, [[ax, az], [bx, bz]]).d < 0.06) return true;
+    if (heightAt(x, z) > 0.28) return true;
     return false;
   }
 
@@ -488,12 +499,20 @@ export class DudaWorld {
     const kinds: TreeSpot['kind'][] = ['apple', 'orange', 'blossom', 'apple', 'autumn', 'orange', 'blossom', 'apple', 'orange'];
     let k = 0;
     for (let z = oz0 + 0.04; z < oz1; z += 0.1) for (let x = ox0 + 0.04; x < ox1; x += 0.1) spots.push({ x, y: heightAt(x, z), z, s: 0.95, kind: kinds[k++ % kinds.length] });
-    // forest in the west
-    const forestN = Math.round(count * 1.1);
-    for (let i = 0, n = 0; i < forestN * 6 && n < forestN; i++) {
-      const x = range(rng, FOREST[0], FOREST[1]);
-      const z = range(rng, FOREST[2], FOREST[3]);
-      if (tryPlace(x, z, rng() < 0.45 ? 'pine' : rng() < 0.1 ? 'autumn' : 'green', 0.85 + rng() * 0.5)) n++;
+    // forests: the big one in the west, plus south, north and east woods (like the map)
+    const forests: Array<[Rect, number, number]> = [
+      [FOREST_WEST, 1.6, 0.4],
+      [FOREST_SOUTH, 0.5, 0.25],
+      [FOREST_NORTH, 0.7, 0.3],
+      [FOREST_EAST, 0.7, 0.35],
+    ];
+    for (const [rect, share, pine] of forests) {
+      const want = Math.round(count * share);
+      for (let i = 0, n = 0; i < want * 8 && n < want; i++) {
+        const x = range(rng, rect[0], rect[1]);
+        const z = range(rng, rect[2], rect[3]);
+        if (tryPlace(x, z, rng() < pine ? 'pine' : rng() < 0.1 ? 'autumn' : rng() < 0.08 ? 'blossom' : 'green', 0.85 + rng() * 0.5)) n++;
+      }
     }
     // pines on the mountain slopes
     for (let i = 0, n = 0; i < 600 && n < Math.round(count * 0.55); i++) {
@@ -506,14 +525,13 @@ export class DudaWorld {
     }
     // scattered trees in town, by the river and around the rim
     for (let i = 0, n = 0; i < 900 && n < Math.round(count * 0.6); i++) {
-      const x = range(rng, -1.35, 1.35);
-      const z = range(rng, -1.1, 1.1);
+      const x = range(rng, -1.7, 1.7);
+      const z = range(rng, -1.05, 1.05);
       if (heightAt(x, z) > 0.06) continue;
       const kind: TreeSpot['kind'] = rng() < 0.18 ? 'blossom' : rng() < 0.12 ? 'autumn' : 'green';
       if (tryPlace(x, z, kind, 0.8 + rng() * 0.4)) n++;
     }
     // a few trees inside the farm, along the back fence
-    for (const x of [-1.2, -0.62, -0.55]) spots.push({ x, y: heightAt(x, -0.06), z: -0.06, s: 0.9, kind: x < -1 ? 'blossom' : 'green' });
 
     const { group, materials } = buildTrees(spots, this.shake, this.quality.shadows);
     this.extraMats.push(...materials);
@@ -534,8 +552,8 @@ export class DudaWorld {
     const rocks: Array<[number, number, number, number, number, string]> = [];
     const petal = ['#ffffff', '#ffe14d', '#ff8ab6', '#b48cff', '#ff6a4a', '#ffb36b'];
     for (let i = 0; i < 2600; i++) {
-      const x = range(rng, -1.38, 1.38);
-      const z = range(rng, -1.15, 1.15);
+      const x = range(rng, -1.75, 1.75);
+      const z = range(rng, -1.08, 1.08);
       if (this.blocked(x, z, -0.02)) continue;
       const h = heightAt(x, z);
       if (h > 0.08) {
@@ -545,20 +563,36 @@ export class DudaWorld {
       if (flowers.length < 520 && rng() < 0.6) flowers.push([x, h + 0.003, z, 0.7 + rng() * 0.6, 0, petal[Math.floor(rng() * petal.length)]]);
       else if (bushes.length < 160) bushes.push([x, h, z, 0.7 + rng() * 0.8, rng() * 6, rng() < 0.5 ? '#4f9a3a' : '#3f8a34']);
     }
-    // rocks along the bay rim and the river banks
-    for (let i = 0; i < 70; i++) {
-      const a = range(rng, -0.4, 1.9);
-      const x = SEA.x + Math.cos(a) * SEA.r * range(rng, 0.92, 1.1);
-      const z = SEA.z + Math.sin(a) * SEA.r * range(rng, 0.92, 1.1);
-      if (edgeFactor(x, z) > 1) continue;
+    // rocks along the coast and cacti in the desert
+    for (let i = 0; i < 90; i++) {
+      const x = range(rng, COAST[0][0], COAST[COAST.length - 1][0]);
+      const z = coastZ(x) + range(rng, -0.02, 0.05);
+      if (edgeFactor(x, z) > 0.99) continue;
       rocks.push([x, Math.max(heightAt(x, z), SEA_Y), z, 1 + rng() * 1.6, rng() * 6, '#8f877c']);
+    }
+    const cacti: Array<[number, number, number, number, number, string]> = [];
+    for (let i = 0; i < 160 && cacti.length < 26; i++) {
+      const x = range(rng, DESERT[0], DESERT[1]);
+      const z = range(rng, DESERT[2], DESERT[3]);
+      if (edgeFactor(x, z) > 0.93 || distToPolyline(x, z, [[DESERT[0], -0.814], [-0.717, -0.814], [-0.717, -0.5]]).d < 0.05) continue;
+      cacti.push([x, heightAt(x, z), z, 0.8 + rng() * 0.6, rng() * 6, rng() < 0.5 ? '#4f9a5a' : '#3f8a4f']);
     }
     const std = (o: THREE.MeshStandardMaterialParameters) => new THREE.MeshStandardMaterial({ roughness: 0.9, ...o });
     const fMat = std({});
     const bMat = std({});
     const rMat = std({ flatShading: true, roughness: 1 });
     this.extraMats.push(fMat, bMat, rMat);
+    const cactus = (() => {
+      const parts = [
+        new THREE.CapsuleGeometry(0.006, 0.03, 3, 8).translate(0, 0.02, 0),
+        new THREE.CapsuleGeometry(0.004, 0.012, 3, 6).translate(0.009, 0.026, 0),
+        new THREE.CapsuleGeometry(0.004, 0.01, 3, 6).translate(-0.009, 0.02, 0),
+      ];
+      const g = new THREE.BufferGeometry().copy(parts[0]);
+      return mergeAll(parts) ?? g;
+    })();
     this.group.add(
+      scatter(cactus, std({}), cacti, this.quality.shadows),
       scatter(new THREE.IcosahedronGeometry(0.0045, 0), fMat, flowers),
       scatter(new THREE.IcosahedronGeometry(0.018, 1).scale(1, 0.75, 1).translate(0, 0.01, 0), bMat, bushes, this.quality.shadows),
       scatter(new THREE.DodecahedronGeometry(0.014, 0).scale(1, 0.6, 1), rMat, rocks, this.quality.shadows),
@@ -678,14 +712,14 @@ export class DudaWorld {
   private buildButterflies(rng: () => number) {
     const colors = ['#ff9ad5', '#ffe14d', '#9fd3ff', '#ffffff', '#c7a6ff', '#ffb36b', '#ff9ad5', '#ffe14d'];
     const homes: P2[] = [
-      [-0.68, 0.9],
-      [-0.4, 0.92],
-      [-0.85, 0.5],
-      [0.1, 0.62],
-      [0.4, 0.2],
-      [-0.2, -0.3],
-      [0.62, 0.42],
-      [-0.1, 0.8],
+      [-0.4, 0.23],
+      [-0.2, 0.18],
+      [-0.66, 0.15],
+      [0.1, 0.4],
+      [0.6, 0.55],
+      [-0.1, -0.5],
+      [1.1, 0.4],
+      [-0.9, 0.6],
     ];
     homes.forEach(([x, z], i) => {
       const g = new THREE.Group();
@@ -801,7 +835,7 @@ export class DudaWorld {
     for (const s of TOWN_BUILDINGS) this.proxy(s.id, at(s.x, s.z, s.h * 0.7), 0, 0, [s.w, s.h * 1.5, s.d], s.rot);
     TOWN_HOMES.forEach((h, i) => this.proxy(`home${i}`, at(h.x, h.z, 0.08), 0, 0, [hw, 0.18, HOUSE.depth], h.rot));
     this.proxy('fountain', at(PLAZA.x, PLAZA.z, 0.03), 0.065, 0.06);
-    const [[ax, az], [bx, bz]] = PIER;
+    const [[ax, az], [bx, bz]] = PIERS[0];
     this.proxy('pier', new THREE.Vector3((ax + bx) / 2, SEA_Y + 0.02, (az + bz) / 2), 0, 0, [0.06, 0.04, Math.hypot(bx - ax, bz - az)], Math.atan2(bx - ax, bz - az));
     this.proxy('mine', at(MINE.x, MINE.z + 0.03, 0.03), 0.035);
     this.proxy('waterfall', new THREE.Vector3(WATERFALL.x, LAKE.y * 0.5, (WATERFALL.top + WATERFALL.bottom) / 2), 0.05);
@@ -903,8 +937,8 @@ export class DudaWorld {
   cast(where: 'pond' | 'pier' = 'pond'): boolean {
     if (this.fishing >= 0) return false;
     if (where === 'pier') {
-      const [, [x, z]] = PIER;
-      this.bobber.position.set(x + range(Math.random, -0.03, 0.06), SEA_Y, z + range(Math.random, 0.02, 0.08));
+      const [, [x, z]] = PIERS[0];
+      this.bobber.position.set(x + range(Math.random, -0.03, 0.06), SEA_Y, z + range(Math.random, 0.02, 0.06));
     } else this.bobber.position.set(POND.x + range(Math.random, -0.05, 0.05), -0.017, POND.z + range(Math.random, -0.04, 0.04));
     this.bobberY = this.bobber.position.y;
     this.bobber.visible = true;
@@ -985,7 +1019,7 @@ export class DudaWorld {
 
     this.ducks.forEach((d, i) => {
       const a = t * 0.16 + d.userData.ph;
-      if (d.userData.sea) d.position.set(SEA.x - 0.25 + Math.cos(a) * 0.1, SEA_Y + Math.sin(t * 2 + i) * 0.0008, SEA.z - 0.12 + Math.sin(a) * 0.06);
+      if (d.userData.sea) d.position.set(BAY[0] + Math.cos(a) * 0.1, SEA_Y + Math.sin(t * 2 + i) * 0.0008, BAY[1] + Math.sin(a) * 0.05);
       else d.position.set(POND.x + Math.cos(a) * (0.04 + i * 0.02), -0.017 + Math.sin(t * 2 + i) * 0.0008, POND.z + Math.sin(a) * (0.035 + i * 0.012));
       d.rotation.y = -a;
     });
@@ -1266,6 +1300,10 @@ function fallMaterial() {
         #include <colorspace_fragment>
       }`,
   });
+}
+
+function mergeAll(parts: THREE.BufferGeometry[]) {
+  return mergeGeometries(parts.map((g) => (g.index ? g.toNonIndexed() : g)));
 }
 
 let zzzTex: THREE.Texture | null = null;

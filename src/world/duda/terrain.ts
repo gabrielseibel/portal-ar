@@ -3,7 +3,8 @@ import { Noise } from '../../utils/noise';
 import { clamp, distToPolyline, lerp, mulberry32, smoothstep } from '../../utils/math';
 import { rockTexture, toTexture } from './paint';
 import {
-  BEACH, FARM, FIELDS, FOREST, HOUSE, ISLAND, LAKE, MOUNTAINS, ORCHARD, PATHS, PEN, PLAZA, POND, RIVER, RIVER_W, SEA, SEA_Y, WATERFALL, inRect,
+  BEACH, COAST, DESERT, DESERT_ROAD, FARM, FIELDS, FOREST_EAST, FOREST_NORTH, FOREST_POND, FOREST_SOUTH, FOREST_WEST, HOUSE, ISLAND, LAKE, MOUNTAINS, ORCHARD, PATHS, PEN, PLAZA, POND,
+  RIVERS, SEA_Y, WATERFALL, inRect, type P2,
 } from './layout';
 
 const noise = new Noise(77);
@@ -16,39 +17,59 @@ export function edgeFactor(x: number, z: number) {
   return e / edgeNoise(Math.atan2(z, x));
 }
 
-const seaFactor = (x: number, z: number) => smoothstep(SEA.r, SEA.r - 0.2, Math.hypot((x - SEA.x) * 0.9, z - SEA.z));
+/** z of the coastline at x (sea lies south of it); +inf where there is no coast. */
+export function coastZ(x: number) {
+  if (x < COAST[0][0]) return 99;
+  for (let i = 0; i < COAST.length - 1; i++) {
+    const [ax, az] = COAST[i];
+    const [bx, bz] = COAST[i + 1];
+    if (x <= bx) return lerp(az, bz, (x - ax) / (bx - ax));
+  }
+  return COAST[COAST.length - 1][1];
+}
+export const seaFactor = (x: number, z: number) => smoothstep(0.0, 0.09, z - coastZ(x));
 
-/** Ground height (island units). Farm and town stay flat; relief lives in the north-east and at the water. */
+/** Distance to the nearest river (any of them) and that river's parameters. */
+export function nearestRiver(x: number, z: number) {
+  let best = { d: Infinity, t: 0, w: 0.03, top: 0, bottom: 0 };
+  for (const r of RIVERS) {
+    const q = distToPolyline(x, z, r.pts as P2[]);
+    if (q.d / r.w < best.d / best.w) best = { d: q.d, t: q.t, w: r.w, top: r.top, bottom: r.bottom };
+  }
+  return best;
+}
+
+/** Ground height (island units). Farm and town stay flat; relief in the mountains and at the water. */
 export function heightAt(x: number, z: number) {
   let h = 0.006 * noise.fbm2(x * 3.2, z * 3.2, 3);
   for (const m of MOUNTAINS) {
     const d2 = ((x - m.x) ** 2 + (z - m.z) ** 2) / (m.r * m.r);
     h += m.h * Math.exp(-d2 * 2.1) * (0.85 + 0.15 * noise.noise2(x * 9, z * 9));
   }
-  // mountain lake on a plateau
+  // desert dunes
+  if (inRect(x, z, DESERT, 0.05)) h += 0.012 * (0.5 + 0.5 * Math.sin(x * 18 + Math.sin(z * 9) * 2));
+  // mountain lake on a plateau, the waterfall drops through a notch to the river
   const dl = Math.hypot(x - LAKE.x, z - LAKE.z);
-  h = lerp(h, LAKE.y, smoothstep(LAKE.r + 0.13, LAKE.r + 0.03, dl));
-  if (dl < LAKE.r) h = LAKE.y - 0.045 * smoothstep(LAKE.r, LAKE.r * 0.45, dl);
-  // the waterfall drops through a notch south of the lake
-  const wf = Math.abs(x - WATERFALL.x) < 0.05 && z > WATERFALL.top - 0.03 && z < WATERFALL.bottom + 0.02;
-  if (wf) h = Math.min(h, lerp(LAKE.y - 0.02, 0, smoothstep(WATERFALL.top, WATERFALL.bottom, z)));
-  // river bed
-  const r = distToPolyline(x, z, RIVER);
-  h = lerp(h, -0.055, smoothstep(RIVER_W * 1.7, RIVER_W * 0.75, r.d));
-  // bay + beach
-  h = lerp(h, -0.1, seaFactor(x, z));
-  // farm pond
-  const dp = Math.hypot(x - POND.x, z - POND.z);
-  if (dp < POND.r + 0.02) h = Math.min(h, -0.048 * smoothstep(POND.r + 0.02, POND.r * 0.5, dp));
-  // soft roll at the rim; around the bay a rocky lip keeps the sea inside
+  h = lerp(h, LAKE.y, smoothstep(LAKE.r + 0.12, LAKE.r + 0.03, dl));
+  if (dl < LAKE.r) h = LAKE.y - 0.04 * smoothstep(LAKE.r, LAKE.r * 0.45, dl);
+  if (Math.abs(x - WATERFALL.x) < 0.045 && z > WATERFALL.top - 0.02 && z < WATERFALL.bottom + 0.02) h = Math.min(h, lerp(LAKE.y - 0.02, -0.01, smoothstep(WATERFALL.top, WATERFALL.bottom, z)));
+  // river beds
+  const r = nearestRiver(x, z);
+  h = lerp(h, Math.min(h, lerp(r.top, r.bottom, r.t) - 0.035), smoothstep(r.w * 1.7, r.w * 0.75, r.d));
+  // ponds
+  for (const p of [POND, FOREST_POND]) {
+    const dp = Math.hypot(x - p.x, z - p.z);
+    if (dp < p.r + 0.02) h = Math.min(h, -0.048 * smoothstep(p.r + 0.02, p.r * 0.5, dp));
+  }
+  // the sea, with a rocky lip along the island rim
+  const s = seaFactor(x, z);
+  h = lerp(h, -0.1, s);
   const e = edgeFactor(x, z);
-  h -= smoothstep(0.9, 1.0, e) * 0.02;
-  if (seaFactor(x, z) > 0.01) h = Math.max(h, lerp(-0.12, 0.016, smoothstep(0.9, 0.975, e)));
+  h -= smoothstep(0.92, 1.0, e) * 0.02;
+  if (s > 0.01) h = Math.max(h, lerp(-0.12, 0.016, smoothstep(0.93, 0.985, e)));
   return h;
 }
 
-/** Water surface of the river at parameter t (0 = waterfall foot, 1 = bay). */
-export const riverLevel = (t: number) => lerp(-0.012, SEA_Y, t);
 
 const W = ISLAND.a * 2 + 0.1;
 const D = ISLAND.b * 2 + 0.1;
@@ -74,7 +95,13 @@ export function buildTerrain(detail: number, waterMat: THREE.Material, fallMat: 
   cliffMesh.name = 'vale-penhascos';
   const under = new THREE.Mesh(underside, rock);
   under.name = 'vale-base';
-  const water = [seaMesh(waterMat), riverMesh(waterMat), diskMesh(POND.x, POND.z, POND.r, -0.017, waterMat, 'lago-fazenda'), diskMesh(LAKE.x, LAKE.z, LAKE.r + 0.01, LAKE.y - 0.008, waterMat, 'lago-montanha')];
+  const water = [
+    seaMesh(waterMat),
+    ...RIVERS.map((r, i) => riverMesh(waterMat, r.pts, r.w, r.top, r.bottom, `rio-${i}`)),
+    diskMesh(POND.x, POND.z, POND.r, -0.017, waterMat, 'lago-fazenda'),
+    diskMesh(FOREST_POND.x, FOREST_POND.z, FOREST_POND.r, -0.017, waterMat, 'lago-floresta'),
+    diskMesh(LAKE.x, LAKE.z, LAKE.r + 0.01, LAKE.y - 0.008, waterMat, 'lago-montanha'),
+  ];
   const fall = waterfallMesh(fallMat);
   return { ground, cliffs: cliffMesh, underside: under, water, fall, map };
 }
@@ -155,7 +182,7 @@ function cliffGeometries() {
     uv.push(u, 1, u, 1 - (y - bottom) * 2.6);
     if (i > 0) {
       const a = (i - 1) * 2;
-      idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+      idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); // outward-facing
     }
   }
   const cliffs = new THREE.BufferGeometry();
@@ -183,7 +210,7 @@ function cliffGeometries() {
         const b = a + 1;
         const c = a + N + 1;
         const d = c + 1;
-        uidx.push(a, c, b, b, c, d);
+        uidx.push(a, b, c, b, d, c); // outward-facing
       }
     }
   }
@@ -196,11 +223,9 @@ function cliffGeometries() {
 }
 
 function seaMesh(mat: THREE.Material) {
-  const seg = 70;
-  const size = SEA.r * 2.3;
-  const g = new THREE.PlaneGeometry(size, size, seg, seg);
+  const g = new THREE.PlaneGeometry(W, D, 140, Math.round((140 * D) / W));
   g.rotateX(-Math.PI / 2);
-  g.translate(SEA.x, SEA_Y, SEA.z);
+  g.translate(0, SEA_Y, 0);
   const p = g.attributes.position;
   const keep: number[] = [];
   const idx = g.index!;
@@ -210,7 +235,7 @@ function seaMesh(mat: THREE.Material) {
       const v = idx.getX(i + k);
       const x = p.getX(v);
       const z = p.getZ(v);
-      if (edgeFactor(x, z) > 0.985 || seaFactor(x, z) < 0.01) ok = false;
+      if (edgeFactor(x, z) > 0.985 || z < coastZ(x) - 0.04) ok = false;
     }
     if (ok) keep.push(idx.getX(i), idx.getX(i + 1), idx.getX(i + 2));
   }
@@ -220,10 +245,9 @@ function seaMesh(mat: THREE.Material) {
   return m;
 }
 
-function riverMesh(mat: THREE.Material) {
-  const pts = RIVER.map(([x, z]) => new THREE.Vector2(x, z));
-  const curve = new THREE.SplineCurve(pts);
-  const N = 80;
+function riverMesh(mat: THREE.Material, pts2: readonly P2[], width: number, top: number, bottom: number, name: string) {
+  const curve = new THREE.SplineCurve(pts2.map(([x, z]) => new THREE.Vector2(x, z)));
+  const N = 90;
   const pos: number[] = [];
   const idx: number[] = [];
   for (let i = 0; i <= N; i++) {
@@ -232,8 +256,8 @@ function riverMesh(mat: THREE.Material) {
     const tg = curve.getTangent(t);
     const nx = -tg.y;
     const nz = tg.x;
-    const w = RIVER_W * 1.3;
-    const y = riverLevel(t);
+    const w = width * 1.3;
+    const y = lerp(top, bottom, t);
     pos.push(p.x + nx * w, y, p.y + nz * w, p.x - nx * w, y, p.y - nz * w);
     if (i > 0) {
       const a = (i - 1) * 2;
@@ -245,7 +269,7 @@ function riverMesh(mat: THREE.Material) {
   g.setIndex(idx);
   g.computeVertexNormals();
   const m = new THREE.Mesh(g, mat);
-  m.name = 'rio';
+  m.name = name;
   return m;
 }
 
@@ -270,15 +294,18 @@ function waterfallMesh(mat: THREE.Material) {
 }
 
 // ------------------------------------------------------------------ the painted ground map
-type Kind = 'grass' | 'meadow' | 'forest' | 'rock' | 'snow' | 'sand' | 'bed';
+type Kind = 'grass' | 'meadow' | 'forest' | 'rock' | 'snow' | 'sand' | 'desert' | 'bed';
 
 function classify(x: number, z: number, h: number, slope: number): Kind {
-  const water = seaFactor(x, z) > 0.4 || distToPolyline(x, z, RIVER).d < RIVER_W * 1.05 || Math.hypot(x - POND.x, z - POND.z) < POND.r || Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r;
+  const r = nearestRiver(x, z);
+  const water = seaFactor(x, z) > 0.4 || r.d < r.w * 1.05 || Math.hypot(x - POND.x, z - POND.z) < POND.r || Math.hypot(x - FOREST_POND.x, z - FOREST_POND.z) < FOREST_POND.r || Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r;
   if (water) return 'bed';
-  if (h > 0.34) return 'snow';
-  if (h > 0.11 || slope > 1.4) return 'rock';
-  if (seaFactor(x, z) > 0.02 || (Math.hypot(x - BEACH.x, (z - BEACH.z) * 1.2) < BEACH.r * 0.55 && z > 0.7)) return 'sand';
-  if (inRect(x, z, FOREST)) return 'forest';
+  if (h > 0.3) return 'snow';
+  if (h > 0.1 || slope > 1.4) return 'rock';
+  if (inRect(x, z, DESERT, 0.03)) return 'desert';
+  const toCoast = coastZ(x) - z;
+  if (toCoast < 0.05 || (x > BEACH[0] && x < BEACH[1] && toCoast < 0.13)) return 'sand';
+  if (inRect(x, z, FOREST_WEST) || inRect(x, z, FOREST_SOUTH) || inRect(x, z, FOREST_EAST) || inRect(x, z, FOREST_NORTH)) return 'forest';
   if (inRect(x, z, FARM)) return 'meadow';
   return 'grass';
 }
@@ -310,6 +337,7 @@ function paintGroundMap(size: number) {
     rock: [new THREE.Color('#8a7864'), new THREE.Color('#a8957a')],
     snow: [new THREE.Color('#e8eef6'), new THREE.Color('#ffffff')],
     sand: [new THREE.Color('#e3c98c'), new THREE.Color('#f0dca6')],
+    desert: [new THREE.Color('#e8b85e'), new THREE.Color('#f2cf7c')],
     bed: [new THREE.Color('#5d7f6a'), new THREE.Color('#7a9a7a')],
   };
   const tmp = new THREE.Color();
@@ -362,7 +390,7 @@ function paintGroundMap(size: number) {
     const k = kindAt(px, py);
     if (k === 'bed' || k === 'snow') continue;
     const pal =
-      k === 'sand' ? ['#f6e6b8', '#d9bd80'] : k === 'rock' ? ['#b5a28a', '#6e5e50', '#8a7a6a'] : k === 'forest' ? ['#2f6a2c', '#4f8f3a', '#6aa84a'] : ['#4f9a3a', '#8fcf5a', '#a7d96a', '#5fa543'];
+      k === 'sand' || k === 'desert' ? ['#f6e6b8', '#d9a95a'] : k === 'rock' ? ['#b5a28a', '#6e5e50', '#8a7a6a'] : k === 'forest' ? ['#2f6a2c', '#4f8f3a', '#6aa84a'] : ['#4f9a3a', '#8fcf5a', '#a7d96a', '#5fa543'];
     ctx.globalAlpha = 0.3 + rng() * 0.3;
     ctx.strokeStyle = pal[Math.floor(rng() * pal.length)];
     ctx.lineWidth = 1 + rng() * 2.2;
@@ -417,6 +445,8 @@ function paintGroundMap(size: number) {
     });
     ctx.stroke();
   };
+  drawPath(DESERT_ROAD, 0.05, '#6e6a64');
+  drawPath(DESERT_ROAD, 0.04, '#8c877e');
   for (const p of PATHS) drawPath(p, 0.062, '#a9814f');
   for (const p of PATHS) drawPath(p, 0.048, '#d2aa6e');
   for (const p of PATHS) {
