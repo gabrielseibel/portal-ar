@@ -19,8 +19,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 
-const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const dist = path.join(root, 'dist');
 const out = path.join(root, 'tests', 'output');
 fs.mkdirSync(out, { recursive: true });
@@ -134,7 +135,7 @@ async function tapObject(page, expr) {
 
 console.log(`\nPORTAL e2e — serving dist at ${ORIGIN}${BASE}\n`);
 
-// ================================================================ suite A: camera + marker AR
+// ================================================================ suite A: camera (gyroscope first; marker only via ?mode / code)
 {
   const browser = await chromium.launch({ args: [...GL_ARGS, ...CAM_ARGS] });
   const ctx = await browser.newContext({ viewport: { width: 412, height: 860 }, permissions: ['camera'], hasTouch: false });
@@ -159,26 +160,26 @@ console.log(`\nPORTAL e2e — serving dist at ${ORIGIN}${BASE}\n`);
     const txt = await page.textContent('.cap-text');
     assert(!txt.includes('com detecção de superfícies'), 'should not claim surface detection: ' + txt);
     assert(txt.includes('Sem detecção de superfícies'), 'honest capability text: ' + txt);
-    assert(await page.isVisible('.marker-only'), 'marker link visible on devices without WebXR');
+    assert((await page.locator('.marker-only').count()) === 0, 'no printed-marker link: the camera opens straight away');
   });
 
-  await test('2+4. sem WebXR: opções explicadas → marcador → câmera ativa', async () => {
+  await test('2+4. sem WebXR: direto para a câmera com giroscópio (sem marcador) → câmera ativa', async () => {
     await page.click('#open-portal');
-    await page.waitForSelector('.sheet-wrap.on', { timeout: 60000 });
-    assert((await page.textContent('.sheet-title')).includes('não detecta superfícies'), 'choice sheet');
-    await page.click('.sheet .pill:has-text("Tenho o marcador impresso")');
-    await page.waitForFunction(() => window.__portal?.currentMode === 'marker', null, { timeout: 60000 });
+    await page.waitForFunction(() => window.__portal?.currentMode === 'manual', null, { timeout: 60000 });
+    assert(!(await page.isVisible('.sheet-wrap.on')), 'no choice sheet before the camera');
+    const ins = await page.textContent('.instruction');
+    assert(ins.includes('Explorar em 3D'), '3D offered as the alternative: ' + ins);
     const live = await page.evaluate(() => {
       const v = document.querySelector('video.camera-feed');
       return { w: v.videoWidth, playing: !v.paused, tracks: v.srcObject?.getVideoTracks().length };
     });
     assert(live.w > 0 && live.tracks === 1, 'camera stream not live ' + JSON.stringify(live));
-    // the fake camera shows the marker right away, so placement may already be underway
     const title = await page.textContent('.ins-title');
-    assert(/Procure uma superfície plana para abrir seu portal\.|Marcador encontrado/.test(title), 'placement instruction: ' + title);
+    assert(/Procure uma superfície plana para abrir seu portal\./.test(title), 'placement instruction: ' + title);
   });
 
-  await test('5. posicionamento: marcador impresso detectado e pose estimada', async () => {
+  await test('5. modo marcador (opcional): marcador impresso detectado e pose estimada', async () => {
+    await page.evaluate(() => window.__portal.runCameraMode('marker'));
     await page.waitForFunction(() => window.__portal.phase !== 'hidden', null, { timeout: 60000 });
     const a = await page.evaluate(() => window.__portal.stage.anchor.position.toArray());
     assert(a[2] < -0.5, 'anchor should be in front of camera: ' + a);
@@ -225,8 +226,7 @@ console.log(`\nPORTAL e2e — serving dist at ${ORIGIN}${BASE}\n`);
 
   await test('5b. modo manual: tocar posiciona o portal na superfície assumida', async () => {
     await page.click('.dock-btn[aria-label="Reposicionar"]');
-    // the fake feed always shows the marker (it is re-found instantly), so switch modes programmatically —
-    // the same call the "Sem marcador" button makes
+    // the fake feed always shows the marker (it is re-found instantly), so switch modes programmatically
     await page.evaluate(() => window.__portal.runCameraMode('manual'));
     await page.waitForFunction(() => window.__portal.currentMode === 'manual', null, { timeout: 30000 });
     await page.waitForTimeout(400);
@@ -359,7 +359,7 @@ console.log(`\nPORTAL e2e — serving dist at ${ORIGIN}${BASE}\n`);
     await page.waitForSelector('.sheet-wrap.on', { timeout: 60000 });
     assert((await page.textContent('.sheet-title')).includes('câmera'), 'denied sheet title');
     await page.screenshot({ path: path.join(out, 'e2e-02-denied.png') });
-    await page.click('.sheet .pill:has-text("Explorar sem câmera")');
+    await page.click('.sheet .pill:has-text("Explorar em 3D")');
     await page.waitForFunction(() => window.__portal.currentMode === 'explore', null, { timeout: 60000 });
   });
   await test('sem erros de JavaScript (suite permissões)', async () => {
@@ -501,6 +501,129 @@ console.log(`\nPORTAL e2e — serving dist at ${ORIGIN}${BASE}\n`);
     await page.waitForFunction(() => window.__portal?.stage.kind === 'fantasia' && window.__portal.phase !== 'hidden', null, { timeout: 120000 });
   });
   await test('sem erros de JavaScript (suite Vale Alecrim)', async () => {
+    assert(errors.length === 0, errors.join(' | '));
+  });
+  await browser.close();
+}
+
+// ================================================================ suite F: Vale da Duda (third world: the user's farmhouse + painted valley)
+{
+  const browser = await chromium.launch({ args: GL_ARGS });
+  const page = await browser.newPage({ viewport: { width: 900, height: 700 } });
+  currentPage = page;
+  const errors = [];
+  watchErrors(page, errors);
+  const W = 'p.stage.world';
+  await maybeThrottle(page);
+  const look = (cam, target) =>
+    page.evaluate(([c, t]) => {
+      const p = window.__portal;
+      p.engine.camera.position.set(...c);
+      p.explore.controls.target.set(...t);
+      p.explore.controls.update();
+    }, [cam, target]);
+  await test('duda: seletor de mundo, modelos carregados e portal aberto', async () => {
+    await page.goto(URL_);
+    await page.click('.world-opt[data-world="duda"]');
+    assert((await page.getAttribute('.world-opt[data-world="duda"]', 'aria-checked')) === 'true', 'picker');
+    await page.click('#explore-3d');
+    await page.waitForFunction(() => window.__portal?.phase === 'open', null, { timeout: 180000 });
+    const info = await page.evaluate(() => {
+      const w = window.__portal.stage.world;
+      const names = [];
+      w.group.traverse((o) => o.isMesh && names.push(o.name));
+      return { kind: window.__portal.stage.kind, err: w.loadError, trees: w.trees.length, farm: names.includes('vale-terreno'), house: !!w.group.getObjectByName('casa-da-duda'), homes: w.group.children.filter((o) => o.name === 'casa-vila').length };
+    });
+    assert(info.kind === 'duda', 'world kind');
+    assert(!info.err, 'load error: ' + info.err);
+    assert(info.farm && info.house, 'painted valley + farmhouse GLB in the scene');
+    assert(info.homes >= 3, 'town homes (copies of the farmhouse) ' + info.homes);
+    assert(info.trees > 30, 'trees ' + info.trees);
+    await page.evaluate(() => {
+      const p = window.__portal;
+      p.explore.controls.autoRotate = false;
+      p.explore.controls.enableDamping = false;
+      p.stage.world.timeScale = 0;
+    });
+    await look([0.1, 2.5, 2.2], [0, 1.0, 0]);
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: path.join(out, 'e2e-duda.png') });
+  });
+  await test('duda: a Duda fala ao toque', async () => {
+    await page.evaluate(() => (window.__portal.stage.world.talk = 99)); // stand still
+    const hit = await tapObject(page, `${W}.duda.hitProxy`);
+    assert(hit === 'duda', 'hit ' + hit);
+    await page.waitForSelector('.speech.on');
+    assert((await page.textContent('.speech')).startsWith('Duda:'), 'speech');
+  });
+  await test('duda: colheita das cinco plantações → descoberta', async () => {
+    await page.evaluate(() => window.__portal.discoveries.reset());
+    await look([-0.5, 1.75, 1.05], [-0.5, 1.07, 0.27]);
+    await page.waitForTimeout(300);
+    for (const k of ['tomato', 'pumpkin', 'blueberry', 'cauli', 'strawberry']) {
+      if (k === 'strawberry') await look([-0.79, 1.6, 1.3], [-0.79, 1.07, 0.7]);
+      const hit = await tapObject(page, `${W}.proxies['field:${k}']`);
+      assert(hit === `field:${k}`, `field ${k}: ${hit}`);
+    }
+    assert(await page.evaluate(() => window.__portal.discoveries.has('duda-colheita')), 'harvest discovery');
+    const g = await page.evaluate(() => Math.max(...Object.values(window.__portal.stage.world.growth)));
+    assert(g < 0.2, 'fields regrowing ' + g);
+  });
+  await test('duda: Biscoito, galinhas (ovo dourado) e colmeias (mel)', async () => {
+    await look([-0.9, 1.45, 0.7], [-0.9, 1.07, 0.15]);
+    await page.waitForTimeout(300);
+    assert((await tapObject(page, `${W}.proxies.dog`)) === 'dog', 'dog');
+    assert(await page.evaluate(() => window.__portal.stage.world.dogAwake), 'dog awake');
+    await look([-0.31, 1.45, 1.3], [-0.31, 1.07, 0.77]);
+    await page.waitForTimeout(300);
+    for (let i = 0; i < 3; i++) assert((await tapObject(page, `${W}.proxies.chickens`)) === 'chickens', 'chickens');
+    assert(await page.evaluate(() => window.__portal.stage.world.eggVisible), 'golden egg');
+    assert((await tapObject(page, `${W}.proxies.egg`)) === 'egg', 'egg tap');
+    await look([-0.8, 1.45, 0.55], [-0.8, 1.07, 0.0]);
+    await page.waitForTimeout(300);
+    for (let i = 0; i < 3; i++) assert((await tapObject(page, `${W}.proxies.hives`)) === 'hives', 'hives');
+    const d = await page.evaluate(() => ['duda-biscoito', 'duda-ovo', 'duda-mel'].map((id) => window.__portal.discoveries.has(id)));
+    assert(d.every(Boolean), 'discoveries ' + d);
+  });
+  await test('duda: noite → Flor da Lua na estufa; casa adianta o tempo', async () => {
+    await page.evaluate(() => (window.__portal.stage.world.timeOfDay = 0.97));
+    await page.waitForTimeout(300);
+    await look([-1.06, 1.5, 0.62], [-1.06, 1.1, 0.06]);
+    await page.waitForTimeout(300);
+    assert((await tapObject(page, `${W}.proxies.greenhouse`)) === 'greenhouse', 'greenhouse');
+    assert(await page.evaluate(() => window.__portal.discoveries.has('duda-lua')), 'moon flower');
+    await look([-1.0, 1.55, 1.05], [-1.0, 1.12, 0.42]);
+    await page.waitForTimeout(300);
+    const t0 = await page.evaluate(() => window.__portal.stage.world.timeOfDay);
+    assert((await tapObject(page, `${W}.proxies.house`)) === 'house', 'house');
+    const t1 = await page.evaluate(() => window.__portal.stage.world.timeOfDay);
+    assert(Math.abs(((t1 - t0 + 1) % 1) - 0.5) < 0.01, 'time skipped ' + t0 + '→' + t1);
+    await page.click('.card .card-close');
+    await page.waitForTimeout(450);
+  });
+  await test('duda: pesca no lago + painel de descobertas', async () => {
+    await look([-0.56, 1.5, 1.35], [-0.56, 1.05, 0.8]);
+    await page.waitForTimeout(300);
+    { const hit = await tapObject(page, `${W}.proxies.pond`); assert(hit === 'pond', 'pond tap hit: ' + hit); }
+    await page.waitForFunction(() => /Fisgou|Arco/.test(document.querySelector('.hint')?.textContent + document.querySelector('.card')?.textContent), null, { timeout: 30000 });
+    await page.click('.dock-btn[aria-label="Descobertas"]');
+    await page.waitForSelector('.panel-wrap.on');
+    assert(/[4-7] de 7/.test(await page.textContent('.panel-eyebrow')), 'panel ' + (await page.textContent('.panel-eyebrow')));
+    await page.click('.panel-close');
+  });
+  await test('duda: vila — prédio, fonte e moradores', async () => {
+    await look([0.22, 1.6, 0.75], [0.22, 1.08, 0.04]);
+    await page.waitForTimeout(300);
+    assert((await tapObject(page, `${W}.proxies.fountain`)) === 'fountain', 'fountain');
+    await look([0.22, 1.55, 0.3], [0.22, 1.12, -0.3]);
+    await page.waitForTimeout(300);
+    assert((await tapObject(page, `${W}.proxies.center`)) === 'center', 'community center');
+    await page.waitForSelector('.card.on');
+    assert((await page.textContent('.card')).includes('Centro Comunitário'), 'card');
+    await page.click('.card .card-close');
+    await page.waitForTimeout(450);
+  });
+  await test('sem erros de JavaScript (suite Fazenda da Duda)', async () => {
     assert(errors.length === 0, errors.join(' | '));
   });
   await browser.close();

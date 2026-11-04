@@ -25,10 +25,10 @@ export class ExploreMode implements ARMode {
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.08;
     this.controls.enablePan = false;
-    this.controls.minDistance = 1.8;
+    this.controls.minDistance = 0.6;
     this.controls.maxDistance = 11;
-    this.controls.maxPolarAngle = 1.48;
-    this.controls.minPolarAngle = 0.2;
+    this.controls.maxPolarAngle = 1.53;
+    this.controls.minPolarAngle = 0.05;
     this.controls.rotateSpeed = 0.6;
     this.controls.zoomSpeed = 0.8;
     this.controls.autoRotateSpeed = 0.5;
@@ -46,7 +46,8 @@ export class ExploreMode implements ARMode {
     }
     if (resetPosition) {
       const hTan = Math.tan(THREE.MathUtils.degToRad(fov / 2)) * Math.min(1, cam.aspect);
-      const dist = THREE.MathUtils.clamp(1.75 / hTan, 4.6, 9.5);
+      const big = this.stage.kind === 'duda' ? 1.75 : 1.25; // the valley is wider than the other islands
+      const dist = THREE.MathUtils.clamp(big / hTan, 3.0, 9.5);
       cam.position.set(0, 1.0, 0).add(new THREE.Vector3(0.12, 0.33, 1).normalize().multiplyScalar(dist));
       this.controls.target.set(0, 1.0, 0);
     }

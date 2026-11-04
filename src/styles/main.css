@@ -329,6 +329,9 @@ body.in-experience #input-layer {
 .world-pick {
   margin-top: clamp(16px, 3vh, 28px);
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: 100%;
   gap: 8px;
   animation: rise 1.6s 1.05s both cubic-bezier(0.2, 0.7, 0.1, 1);
 }
@@ -367,6 +370,22 @@ body.in-experience #input-layer {
 .wo-sub {
   font-size: 10.5px;
   color: var(--faint);
+}
+@media (max-width: 520px) {
+  .world-opt {
+    min-width: 0;
+    flex: 1 1 0;
+    padding: 9px 6px;
+  }
+  .wo-name {
+    font-size: 11.5px;
+    letter-spacing: 0.04em;
+    text-align: center;
+  }
+  .wo-sub {
+    font-size: 9.5px;
+    text-align: center;
+  }
 }
 .cta-group {
   margin-top: clamp(18px, 4vh, 44px);

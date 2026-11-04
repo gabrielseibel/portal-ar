@@ -3,6 +3,7 @@ import type { QualitySettings } from '../systems/Quality';
 import { Portal } from '../effects/Portal';
 import { World } from '../world/World';
 import { FarmWorld } from '../world/farm/FarmWorld';
+import { DudaWorld } from '../world/duda/DudaWorld';
 import { Dragon, DRAGON_TEAL } from '../characters/Dragon';
 import { Birds } from '../characters/Birds';
 import { Sky } from '../world/Sky';
@@ -16,7 +17,7 @@ import { glowTexture } from '../utils/textures';
 
 export type StagePhase = 'hidden' | 'opening' | 'open';
 export type Environment = 'ar' | 'explore';
-export type WorldKind = 'fantasia' | 'vila';
+export type WorldKind = 'fantasia' | 'vila' | 'duda';
 
 const RISE_START = 1.9;
 const RISE_DUR = 2.6;
@@ -33,7 +34,7 @@ export class Stage {
   readonly anchor = new THREE.Group();
   readonly root = new THREE.Group();
   readonly portal: Portal;
-  readonly world: World | FarmWorld;
+  readonly world: World | FarmWorld | DudaWorld;
   readonly kind: WorldKind;
   readonly hasDragon: boolean;
   readonly dragon: Dragon;
@@ -60,6 +61,8 @@ export class Stage {
   private seqRunning = false;
 
   baseScale = 1;
+  /** Extra height of the island above its normal place (stage units, user adjustable). */
+  islandLift = 0;
   userScale = 1;
   userYaw = 0;
   readonly userOffset = new THREE.Vector3();
@@ -98,7 +101,7 @@ export class Stage {
     this.portal = new Portal(q.particles);
     this.root.add(this.portal.group);
 
-    this.world = kind === 'vila' ? new FarmWorld(q) : new World(q, this.fire, this.root);
+    this.world = kind === 'vila' ? new FarmWorld(q) : kind === 'duda' ? new DudaWorld(q) : new World(q, this.fire, this.root);
     this.world.group.position.y = ISLAND_Y;
     this.root.add(this.world.group);
 
@@ -125,7 +128,12 @@ export class Stage {
 
     // island + dragon rise *through* the portal: clip everything below the surface
     const clip = [this.clipPlane];
-    for (const m of [...this.world.materials(), ...materialsOf(this.dragon.root)]) m.clippingPlanes = clip;
+    const applyClip = () => {
+      for (const m of [...this.world.materials(), ...materialsOf(this.dragon.root)]) m.clippingPlanes = clip;
+    };
+    applyClip();
+    // the Fazenda da Duda loads its models asynchronously
+    if (this.world instanceof DudaWorld) void this.world.ready.then(applyClip);
 
     this.hideAll();
     this.applyTransform();
@@ -243,6 +251,19 @@ export class Stage {
     }
   }
 
+  get islandY() {
+    return ISLAND_Y + this.islandLift;
+  }
+
+  /** Raises/lowers the island (and its sky) without restarting the opening. */
+  setIslandLift(v: number) {
+    this.islandLift = v;
+    this.islandCenter.y = this.islandY + 0.25;
+    this.sky.group.position.y = v;
+    this.birds.group.position.y = v;
+    if (!this.seqRunning || this.seqT >= RISE_START + RISE_DUR) this.world.group.position.y = this.islandY;
+  }
+
   get worldScale() {
     return this.root.getWorldScale(this.tmp).x;
   }
@@ -281,7 +302,7 @@ export class Stage {
     this.portal.progress = 1;
     this.portal.markOpen();
     this.world.group.visible = true;
-    this.world.group.position.y = ISLAND_Y;
+    this.world.group.position.y = this.islandY;
     this.world.group.scale.setScalar(1);
     this.world.group.rotation.y = 0;
     this.sky.group.visible = this.birds.group.visible = true;
@@ -341,7 +362,7 @@ export class Stage {
     // slow, subtle drift of the sun: dynamic light across the diorama
     const a = t * 0.03;
     this.sun.position.set(Math.cos(a) * 2.6 + 0.6, 4.2 + Math.sin(a * 1.7) * 0.3, Math.sin(a) * 2.2 + 1.6);
-    if (this.world instanceof FarmWorld) this.world.applyLighting(this.sun, this.hemi);
+    if (!(this.world instanceof World)) this.world.applyLighting(this.sun, this.hemi);
   }
 
   private runSequence(dt: number) {
@@ -357,7 +378,7 @@ export class Stage {
       }
       const k = clamp((T - RISE_START) / RISE_DUR);
       const e = easeOutCubic(k);
-      this.world.group.position.y = lerp(-1.75, ISLAND_Y, e);
+      this.world.group.position.y = lerp(-1.75, this.islandY, e);
       this.world.group.rotation.y = lerp(-0.9, 0, easeInOutCubic(k));
       this.world.group.scale.setScalar(lerp(0.72, 1, e));
       if (k > 0.75) {

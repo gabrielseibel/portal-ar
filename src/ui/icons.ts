@@ -31,6 +31,14 @@ export const Icon = {
   pickaxe: svg('<path d="M4 9c4-4 11-5 16-2-4-1-8 0-11 3"/><path d="M12 8l-8 12"/>'),
   fish: svg('<path d="M3 12c3-4 8-6 13-3l5-3-1 6 1 6-5-3c-5 3-10 1-13-3z"/><circle cx="14" cy="11" r=".8" fill="currentColor"/>'),
   letter: svg('<rect x="3" y="6" width="18" height="13" rx="1.5"/><path d="M3.5 7l8.5 6.5L20.5 7"/>'),
+  arrowUp: svg('<path d="M12 19V5M6 11l6-6 6 6"/>'),
+  arrowDown: svg('<path d="M12 5v14M6 13l6 6 6-6"/>'),
+  dog: svg('<path d="M5 9l-2 5 3 1 1-3"/><path d="M19 9l2 5-3 1-1-3"/><path d="M7 7c1.5-1.5 3-2 5-2s3.5.5 5 2l1 6c0 4-3 6-6 6s-6-2-6-6l1-6z"/><circle cx="10" cy="11" r=".7" fill="currentColor"/><circle cx="14" cy="11" r=".7" fill="currentColor"/><path d="M11 15h2l-1 1.2z"/>'),
+  egg: svg('<path d="M12 3c3.5 0 6.5 5.5 6.5 10a6.5 6.5 0 01-13 0C5.5 8.5 8.5 3 12 3z"/><path d="M9 12.5c.3-1.6 1.1-3 2-3.8"/>'),
+  honey: svg('<path d="M7 8h10l1 11a2 2 0 01-2 2H8a2 2 0 01-2-2L7 8z"/><path d="M8 5h8v3H8z"/><path d="M8.5 13c1 .8 2.2.8 3.5 0s2.5-.8 3.5 0"/>'),
+  clover: svg('<path d="M12 12c-3-1-5-3-3.5-5S12 7 12 9c0-2 2-3.5 3.5-2S15 11 12 12z"/><path d="M12 12c-1 3-3 5-5 3.5S7 12 9 12c-2 0-3.5-2-2-3.5"/><path d="M12 12c1 3 3 5 5 3.5S17 12 15 12"/><path d="M12 12c0 4 1 7 3 9"/>'),
+  flower: svg('<circle cx="12" cy="9" r="2"/><path d="M12 7c0-3 3-3 3-1s-1 3-3 3c3 0 3 3 1 3s-3-1-3-3c0 3-3 3-3 1s1-3 3-3c-3 0-3-3-1-3s3 1 3 3"/><path d="M12 13v8M12 17c2-2 4-2 5-1"/>'),
+  basket: svg('<path d="M3 10h18l-2 10H5L3 10z"/><path d="M7 10l3-6M17 10l-3-6M8 14v3M12 14v3M16 14v3"/>'),
   sun: svg('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'),
 } as const;
 
