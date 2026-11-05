@@ -57,7 +57,7 @@ Na tela inicial você escolhe o que sai do portal (são três mundos):
 
 ### Fazenda da Duda (um vale inteiro no estilo da casa)
 
-O terceiro mundo é um vale pintado à mão no estilo do modelo da **casa da fazenda** (`Stardew_Valley_Farmhouse.fbx`), seguindo o mapa e as imagens de referência do projeto.
+O terceiro mundo é um vale pintado à mão no estilo do modelo da **casa da fazenda**, seguindo o mapa e as imagens de referência do projeto.
 
 - **Casa da Duda**: o modelo da casa com as texturas pintadas originais (`casa.glb`, ~250 KB, WebP). No export ela é nivelada (o FBX vinha inclinado 19,6°) e alinhada (girada 33,5°), e sai fumaça da chaminé do próprio modelo. **Cópias da casa** com telhados de outras cores são as casas da vila.
 - **O vale**: relevo e chão pintados no navegador (pinceladas de grama, trilhas de terra, praça de pedras, canteiros arados, areia, rocha e neve), com:
@@ -68,8 +68,6 @@ O terceiro mundo é um vale pintado à mão no estilo do modelo da **casa da faz
 - **Vida**: a Duda faz a rotina dela (rega, visita a vila, acena para as galinhas), quatro moradores passeiam e conversam, árvores balançam, galinhas ciscam, patos nadam no lago e na baía, abelhas, borboletas, vaga-lumes, lampiões e janelas acesas à noite.
 - **Interações**: Duda e moradores (falam), plantações (colher), árvores, casa (descansar e adiantar o dia), prédios da vila e casas (cartões), chafariz, píer e lago (pescar), mina e cachoeira.
 - **7 segredos**: Biscoito, Ovo Dourado, Mel Encantado, Carpa Arco-íris, Trevo da Sorte, Flor da Lua (só à noite, na estufa) e Colheita Completa.
-
-Para regenerar a casa a partir do FBX (Blender 4.x/5.x), veja [`tools/fazenda-da-duda/`](tools/fazenda-da-duda/README.md).
 
 ## Como a realidade aumentada funciona (três modos reais)
 
@@ -97,23 +95,6 @@ Ao tocar em **ABRIR MEU PORTAL**, o PORTAL verifica o que o aparelho realmente s
 - Fontes auto-hospedadas via **@fontsource** (Cinzel, Cormorant Garamond, Manrope). Nada é carregado de CDN.
 - **GitHub Actions** + **GitHub Pages**
 
-## Como executar localmente
-
-Requisitos: Node.js 20+ (recomendado 22).
-
-```bash
-npm install
-npm run dev        # servidor de desenvolvimento em http://localhost:5173 (exposto na rede local)
-npm run build      # verificação de tipos + build de produção em dist/
-npm run preview    # serve o build de produção
-```
-
-**Testando no celular:** a câmera e o WebXR só funcionam em **HTTPS** (ou `localhost`). Opções:
-
-- Publique no GitHub Pages (HTTPS automático), **ou**
-- No Android, use *Depuração USB* + `chrome://inspect` → *Port forwarding* `5173 → localhost:5173` e abra `http://localhost:5173` no celular, **ou**
-- Use um túnel HTTPS de sua preferência apontando para a porta 5173.
-
 Parâmetros de URL úteis:
 
 | Parâmetro | Efeito |
@@ -124,21 +105,6 @@ Parâmetros de URL úteis:
 | `?autostart=explore` | Entra direto no modo 3D |
 | `?world=fantasia\|vila\|duda` | Escolhe o mundo |
 | `?timescale=3` | Acelera o relógio do mundo (usado nos testes automatizados) |
-
-## Como publicar no GitHub Pages
-
-O workflow `.github/workflows/deploy.yml` já faz tudo (build, testes e2e, publicação).
-
-1. No GitHub, abra **Settings → Pages** e, em **Build and deployment → Source**, escolha **GitHub Actions**.
-2. Faça *push* para a branch `main`, ou rode o workflow manualmente em **Actions → Deploy to GitHub Pages → Run workflow**.
-3. O site fica em `https://<usuario>.github.io/<repositorio>/`. Por exemplo: `https://gabrielseibel.github.io/portal-ar/`.
-
-Detalhes que tornam isso robusto:
-
-- `base: './'` no Vite: todos os caminhos são **relativos**, então o build funciona em qualquer subdiretório (inclusive em forks com outro nome). Para um caminho absoluto, use `BASE_PATH=/meu-repo/ npm run build`.
-- `public/.nojekyll` desativa o processamento Jekyll.
-- Os testes e2e servem o `dist/` a partir de **`/portal-ar/`**, exatamente como o GitHub Pages faz, e falham se houver qualquer 404.
-- Não existe servidor Node em produção: só arquivos estáticos.
 
 ## Instruções de uso
 
@@ -227,52 +193,3 @@ Otimizações:
 - **Perda de contexto WebGL** tratada (aviso + restauração).
 - Carregamento em etapas: a tela inicial tem ~23 KB de JS e aparece na hora; Three.js e o mundo são carregados e construídos em segundo plano.
 
-## Estrutura do projeto
-
-```
-src/
-  main.ts                 entrada: tela inicial, detecção de recursos, carregamento sob demanda
-  app/Experience.ts       orquestração: modos, posicionamento, abertura, interações, UI
-  ar/                     sistema de AR
-    capabilities.ts         detecção honesta (WebXR, câmera, giroscópio, HTTPS)
-    WebXRMode.ts            immersive-ar + hit-test + anchors + dom-overlay
-    MarkerMode.ts           rastreamento do marcador impresso (6DoF)
-    MarkerTracker.ts        ArUco + POSIT → matriz Three.js
-    ManualMode.ts           plano assumido + giroscópio (3DoF)
-    ExploreMode.ts          modo 3D sem câmera (OrbitControls)
-    CameraFeed.ts           câmera traseira + campo de visão compatível com object-fit: cover
-    vendor/aruco.js         js-aruco2 (MIT) como módulo ES
-  scenes/Stage.ts         âncora, luzes, sombras no chão real, linha do tempo da abertura
-  world/                  mundo fantástico (terreno, água, vegetação, vila, castelo, cristais, céu…)
-  characters/             dragão, pássaros, lanudos, espírito da floresta
-  effects/                portal, retículo, partículas (pool CPU e GPU)
-  interactions/           raycast de toques, gestos multitoque, descobertas
-  audio/AudioEngine.ts    identidade sonora sintetizada + áudio espacial
-  systems/                renderização (Engine), qualidade, armazenamento, haptics, assets
-  ui/                     interface (overlay, tela inicial, ícones)
-  components/             componentes de interface reutilizáveis
-  assets/                 definição do marcador
-  styles/main.css         identidade visual
-  utils/                  matemática, ruído, DOM, texturas procedurais, mesclagem de geometria
-public/                   marcador para impressão, favicon, manifest, modelos opcionais
-scripts/                  geração do marcador
-tests/                    e2e (Playwright) + gerador do vídeo do marcador
-```
-
-## Modelos GLB opcionais
-
-O mundo padrão não depende de nenhum arquivo 3D externo. Para acrescentar modelos, coloque arquivos `.glb` em `public/models/` e liste-os em `public/models/manifest.json`:
-
-```json
-{ "models": [{ "src": "models/moinho.glb", "position": [0.55, 0.03, 0.55], "rotationY": 0.4, "scale": 0.05 }] }
-```
-
-Eles são carregados depois que o mundo aparece. Arquivo ausente, GLB inválido ou *timeout* geram apenas um aviso no console: a experiência continua normalmente.
-
-## Créditos e licenças
-
-- [three.js](https://threejs.org) (MIT)
-- [js-aruco2](https://github.com/damianofalcioni/js-aruco2) (MIT): Damiano Falcioni e Juan Mellado
-- Fontes [Cinzel](https://fonts.google.com/specimen/Cinzel), [Cormorant Garamond](https://fonts.google.com/specimen/Cormorant+Garamond) e [Manrope](https://fonts.google.com/specimen/Manrope) (SIL Open Font License) via @fontsource
-- Fazenda da Duda: modelos da fazenda e da casa e imagens de referência fornecidos pelo autor do projeto (projeto próprio de imagens e 3D).
-- Todo o resto (mundo, personagens, shaders, sons) foi criado de forma procedural para este projeto.
